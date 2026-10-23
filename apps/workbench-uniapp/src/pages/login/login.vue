@@ -15,8 +15,9 @@
         <text class="label">登录账号（openid）</text>
         <input v-model="openid" placeholder="本地联调可用 demo 账号" />
       </view>
-      <view class="muted tip">本地环境走模拟登录；接真实微信登录后改为 uni.login + code2session</view>
-      <view class="submit" @click="doLogin">进入工作台</view>
+      <view class="muted tip">微信内打开会优先走真实微信登录；本地/浏览器环境自动回退到模拟登录</view>
+      <view class="submit" @click="doWxLogin">微信一键登录</view>
+      <view class="submit ghost" @click="doLogin">本地测试账号登录</view>
     </view>
 
     <view class="muted foot">演示账号：商家 mock_merchant / 骑手 mock_rider</view>
@@ -25,7 +26,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { login } from '../../utils/auth'
+import { login, loginByWechat } from '../../utils/auth'
 
 const role = ref<'MERCHANT' | 'RIDER'>('MERCHANT')
 const openid = ref('mock_merchant')
@@ -34,6 +35,19 @@ const loading = ref(false)
 watch(role, (r) => {
   openid.value = r === 'MERCHANT' ? 'mock_merchant' : 'mock_rider'
 })
+
+async function doWxLogin() {
+  if (loading.value) return
+  loading.value = true
+  try {
+    await loginByWechat(role.value)
+    uni.reLaunch({ url: role.value === 'MERCHANT' ? '/pages/merchant/orders' : '/pages/rider/pool' })
+  } catch (e: any) {
+    uni.showModal({ title: '微信登录不可用', content: (e?.message || '请改用下方本地测试账号') + '\n\n（未配置 AppID 时会这样，详见 docs/接入微信公众平台.md）', showCancel: false })
+  } finally {
+    loading.value = false
+  }
+}
 
 async function doLogin() {
   if (loading.value) return
@@ -65,6 +79,7 @@ async function doLogin() {
 .label { font-size: 26rpx; color: #4b5563; }
 .field input { flex: 1; text-align: right; }
 .tip { margin-top: 16rpx; }
-.submit { margin-top: 30rpx; background: #c2410c; color: #fff; text-align: center; padding: 24rpx; border-radius: 44rpx; }
+.submit { margin-top: 24rpx; background: #c2410c; color: #fff; text-align: center; padding: 24rpx; border-radius: 44rpx; }
+.submit.ghost { background: #fff; color: #c2410c; border: 2rpx solid #c2410c; }
 .foot { text-align: center; margin-top: 40rpx; }
 </style>

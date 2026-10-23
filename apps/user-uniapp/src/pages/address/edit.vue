@@ -35,6 +35,9 @@
           {{ form.lng ? '已选坐标 ' + form.lng.toFixed(4) + ',' + form.lat.toFixed(4) : '点击在地图上选择' }}
         </text>
       </view>
+      <!-- #ifdef H5 -->
+      <view class="hint demo" @click="useDemoPoint">浏览器预览：填入东校区示例坐标（115.9905, 36.4385）</view>
+      <!-- #endif -->
       <view v-if="inFence === false" class="hint warn">该位置不在校园配送范围内</view>
       <view v-if="inFence === true" class="hint ok">该位置在校园配送范围内 ✓</view>
     </view>
@@ -97,6 +100,14 @@ function chooseLocation() {
   })
 }
 
+function useDemoPoint() {
+  form.lng = 115.9905
+  form.lat = 36.4385
+  if (!form.campus) { form.campus = 1; campusName.value = '东校区' }
+  if (!form.detail) form.detail = '3 号宿舍楼 502'
+  checkFence()
+}
+
 async function checkFence() {
   if (!form.lng) return
   const r = await api.parseAddress(form.detail || '校内地址', form.lng, form.lat)
@@ -152,6 +163,7 @@ onLoad(async (q: any) => {
 .picker { color: #374151; font-size: 26rpx; }
 .hint { margin-top: 14rpx; font-size: 24rpx; color: #6b7280; }
 .warn { color: #b45309; }
+.demo { color: #1d4ed8; text-decoration: underline; }
 .ok { color: #047857; }
 .muted { color: #9ca3af; }
 .actions { margin-top: 30rpx; }

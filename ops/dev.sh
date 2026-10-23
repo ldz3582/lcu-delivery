@@ -18,6 +18,7 @@ PIDFILE="/tmp/lcu-delivery.pid"
 if [ "${1:-}" = "stop" ]; then
   docker compose down
   [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  pid=$(lsof -ti:8080 2>/dev/null | head -1); [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
   rm -f "$PIDFILE"
   echo "已停止"
   exit 0
@@ -33,14 +34,44 @@ for i in $(seq 1 40); do
   printf "."; sleep 3
 done
 
+# 先停掉占用 8080 的旧进程：否则重新打包会覆盖 jar，旧进程再加载类会 ClassNotFoundException
+old=$(lsof -ti:8080 2>/dev/null | head -1)
+if [ -n "$old" ]; then
+  echo "▶ 停止旧后端进程 $old"
+  kill "$old" 2>/dev/null || true
+  for i in $(seq 1 10); do
+    lsof -ti:8080 >/dev/null 2>&1 || break
+    sleep 1
+  done
+fi
+
 echo "▶ 构建后端"
 (cd ../server && $MAVEN -B -q package -DskipTests)
 
 echo "▶ 启动后端（日志：/tmp/lcu-delivery.log）"
+# 从 .env 读取微信相关配置（没有就留空，后端会走 mock）
+# 读取 .env；把「占位值」当成空（否则后端会拿假 AppID 去调微信）
+env_get() {
+  v=$(grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- || true)
+  case "$v" in
+    ""|wx0000000000000000|replace_me|*replace_me*) echo "" ;;
+    *) echo "$v" ;;
+  esac
+}
+
 DB_URL="jdbc:mysql://127.0.0.1:${MYSQL_PORT:-3307}/lcu_delivery?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true" \
 REDIS_PORT="${REDIS_PORT:-6379}" \
 REDIS_PASSWORD="$(grep -E '^REDIS_PASSWORD=' .env | cut -d= -f2)" \
 ADMIN_INIT_PASSWORD="${ADMIN_INIT_PASSWORD:-Admin@123456}" \
+WX_USER_APPID="$(env_get WX_USER_APPID)" \
+WX_USER_SECRET="$(env_get WX_USER_SECRET)" \
+WX_WORK_APPID="$(env_get WX_WORK_APPID)" \
+WX_WORK_SECRET="$(env_get WX_WORK_SECRET)" \
+WXPAY_MCH_ID="$(env_get WXPAY_MCH_ID)" \
+WXPAY_MCH_SERIAL_NO="$(env_get WXPAY_MCH_SERIAL_NO)" \
+WXPAY_API_V3_KEY="$(env_get WXPAY_API_V3_KEY)" \
+WXPAY_PRIVATE_KEY_PATH="$(env_get WXPAY_PRIVATE_KEY_PATH)" \
+WXPAY_NOTIFY_URL="$(env_get WXPAY_NOTIFY_URL)" \
 nohup java -jar ../server/target/delivery-0.1.0.jar > /tmp/lcu-delivery.log 2>&1 &
 echo $! > "$PIDFILE"
 

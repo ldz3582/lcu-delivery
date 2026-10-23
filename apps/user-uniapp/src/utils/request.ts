@@ -58,9 +58,11 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
   })
 }
 
+type Opt = { showError?: boolean }
+
 export const http = {
-  get: <T = any>(url: string, data?: any) => request<T>({ url, data }),
-  post: <T = any>(url: string, data?: any) => request<T>({ url, method: 'POST', data }),
-  put: <T = any>(url: string, data?: any) => request<T>({ url, method: 'PUT', data }),
-  del: <T = any>(url: string, data?: any) => request<T>({ url, method: 'DELETE', data })
+  get: <T = any>(url: string, data?: any, o?: Opt) => request<T>({ url, data, ...o }),
+  post: <T = any>(url: string, data?: any, o?: Opt) => request<T>({ url, method: 'POST', data, ...o }),
+  put: <T = any>(url: string, data?: any, o?: Opt) => request<T>({ url, method: 'PUT', data, ...o }),
+  del: <T = any>(url: string, data?: any, o?: Opt) => request<T>({ url, method: 'DELETE', data, ...o })
 }

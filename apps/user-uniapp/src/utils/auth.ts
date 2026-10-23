@@ -1,5 +1,7 @@
-// 本地/内测登录：没有小程序 AppSecret 时，用 mock-login 换 token。
-// 接真实微信登录时，把这里换成 uni.login 拿 code，再调 /api/auth/login。
+// 登录策略（自动降级）：
+// 1. 有 AppID/AppSecret：uni.login 拿 code -> /api/auth/login -> 真实 openid
+// 2. 没配置（touristappid / 后端未填密钥 / H5 环境）：自动回退到 mock-login
+// 上线前把 app.mock-login 设为 false，未配置就会直接报错，不会静默降级。
 import { http, getToken, setToken, clearToken } from './request'
 
 export interface LoginResp {
@@ -19,23 +21,51 @@ function deviceOpenid(): string {
   return openid
 }
 
+function wxCode(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    uni.login({
+      provider: 'weixin',
+      success: (r: any) => (r.code ? resolve(r.code) : reject(new Error('no code'))),
+      fail: (e: any) => reject(e)
+    })
+  })
+}
+
+function persist(resp: LoginResp) {
+  setToken(resp.token)
+  uni.setStorageSync('lcu_role', resp.role)
+  uni.setStorageSync('lcu_user', resp)
+}
+
 export async function loginWithRole(role: 'USER' | 'MERCHANT' | 'RIDER'): Promise<LoginResp> {
   let openid = deviceOpenid()
   // 商家/骑手用固定 openid，方便和演示数据对上
   if (role === 'MERCHANT') openid = 'mock_merchant'
   if (role === 'RIDER') openid = 'mock_rider'
   const resp = await http.post<LoginResp>('/api/auth/mock-login', { openid, role })
-  setToken(resp.token)
-  uni.setStorageSync('lcu_role', resp.role)
-  uni.setStorageSync('lcu_user', resp)
+  persist(resp)
+  return resp
+}
+
+/** 真实微信登录；失败时抛错，由调用方决定是否回退 */
+export async function loginByWechat(): Promise<LoginResp> {
+  const code = await wxCode()
+  const resp = await http.post<LoginResp>('/api/auth/login', { code }, { showError: false })
+  persist(resp)
   return resp
 }
 
 export async function ensureLogin(): Promise<LoginResp> {
-  if (getToken()) {
-    return uni.getStorageSync('lcu_user')
+  const cached = uni.getStorageSync('lcu_user')
+  if (getToken() && cached) {
+    return cached
   }
-  return loginWithRole('USER')
+  try {
+    return await loginByWechat()
+  } catch (e) {
+    console.info('微信登录不可用，回退到本地模拟登录', e)
+    return loginWithRole('USER')
+  }
 }
 
 export function logout() {

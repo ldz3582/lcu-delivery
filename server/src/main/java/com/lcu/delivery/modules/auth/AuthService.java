@@ -46,13 +46,11 @@ public class AuthService {
         String appid = wechat.miniapp() == null ? null : wechat.miniapp().appid();
         String secret = wechat.miniapp() == null ? null : wechat.miniapp().secret();
 
-        String openid;
-        if (app.mockLogin() || appid == null || appid.isBlank() || secret == null || secret.isBlank()) {
-            // 本地开发：没有小程序 AppSecret 时，用 code 派生一个稳定 openid，方便反复联调
-            openid = "mock_" + code;
-        } else {
-            openid = wechatClient.code2openid(appid, secret, code);
+        if (appid == null || appid.isBlank() || secret == null || secret.isBlank()) {
+            throw new BizException(ErrorCode.PARAM,
+                    "后端未配置小程序 AppID/AppSecret，请先在 ops/.env 填写并重启");
         }
+        String openid = wechatClient.code2openid(appid, secret, code);
         User user = upsert(openid, null);
         return toResp(user);
     }

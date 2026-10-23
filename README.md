@@ -22,6 +22,15 @@ lcu-delivery/
     └── gen_entities.py     从字段定义生成实体/Mapper
 ```
 
+## 接入真实微信小程序（拿 AppID 之后）
+
+```bash
+./ops/use-wechat.sh wx你的AppID 你的AppSecret      # 校验 → 写配置 → 改 manifest → 重建 → 重启并自检
+```
+
+完整步骤（注册、拿密钥、开发者工具、域名备案、上线四件套、错误码）见
+[`docs/接入微信公众平台.md`](docs/接入微信公众平台.md)。
+
 ## 快速开始
 
 ```bash
