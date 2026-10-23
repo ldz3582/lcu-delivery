@@ -1,0 +1,11 @@
+app:
+  mock-login: false
+  mock-pay: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+logging:
+  level:
+    com.lcu.delivery: info

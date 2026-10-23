@@ -1,0 +1,100 @@
+package com.lcu.delivery.modules.auth;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lcu.delivery.common.AuthUser;
+import com.lcu.delivery.common.BizException;
+import com.lcu.delivery.common.ErrorCode;
+import com.lcu.delivery.common.JwtService;
+import com.lcu.delivery.config.AppProperties;
+import com.lcu.delivery.config.WechatProperties;
+import com.lcu.delivery.modules.user.entity.User;
+import com.lcu.delivery.modules.user.mapper.UserMapper;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Set;
+
+@Service
+public class AuthService {
+
+    private static final Set<String> ROLES = Set.of("USER", "MERCHANT", "RIDER", "ADMIN");
+
+    private final UserMapper userMapper;
+    private final JwtService jwtService;
+    private final WechatClient wechatClient;
+    private final AppProperties app;
+    private final WechatProperties wechat;
+
+    public AuthService(UserMapper userMapper, JwtService jwtService, WechatClient wechatClient,
+                       AppProperties app, WechatProperties wechat) {
+        this.userMapper = userMapper;
+        this.jwtService = jwtService;
+        this.wechatClient = wechatClient;
+        this.app = app;
+        this.wechat = wechat;
+    }
+
+    public record LoginResp(String token, Long userId, String role, String nickname, String avatar) {
+    }
+
+    @Transactional
+    public LoginResp login(String code) {
+        if (code == null || code.isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "缺少登录 code");
+        }
+        String appid = wechat.miniapp() == null ? null : wechat.miniapp().appid();
+        String secret = wechat.miniapp() == null ? null : wechat.miniapp().secret();
+
+        String openid;
+        if (app.mockLogin() || appid == null || appid.isBlank() || secret == null || secret.isBlank()) {
+            // 本地开发：没有小程序 AppSecret 时，用 code 派生一个稳定 openid，方便反复联调
+            openid = "mock_" + code;
+        } else {
+            openid = wechatClient.code2openid(appid, secret, code);
+        }
+        User user = upsert(openid, null);
+        return toResp(user);
+    }
+
+    /** 内测用：直接指定 openid 与角色登录，省掉微信授权。生产必须关闭 mock-login。 */
+    @Transactional
+    public LoginResp mockLogin(String openid, String role) {
+        if (!app.mockLogin()) {
+            throw new BizException(ErrorCode.FORBIDDEN, "当前环境未开启模拟登录");
+        }
+        if (openid == null || openid.isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "openid 不能为空");
+        }
+        String normalized = role == null ? "USER" : role.toUpperCase();
+        if (!ROLES.contains(normalized)) {
+            throw new BizException(ErrorCode.PARAM, "非法角色");
+        }
+        User user = upsert(openid, normalized);
+        user.setRole(normalized);
+        user.setUpdatedAt(LocalDateTime.now());
+        userMapper.updateById(user);
+        return toResp(user);
+    }
+
+    private User upsert(String openid, String role) {
+        User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getOpenid, openid));
+        if (user != null) {
+            return user;
+        }
+        user = new User();
+        user.setOpenid(openid);
+        user.setRole(role == null ? "USER" : role);
+        user.setNickname("同学" + (int) (Math.random() * 9000 + 1000));
+        user.setStatus(1);
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        userMapper.insert(user);
+        return user;
+    }
+
+    private LoginResp toResp(User user) {
+        String token = jwtService.issue(new AuthUser(user.getId(), user.getRole()));
+        return new LoginResp(token, user.getId(), user.getRole(), user.getNickname(), user.getAvatar());
+    }
+}

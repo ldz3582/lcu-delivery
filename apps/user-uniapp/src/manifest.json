@@ -1,0 +1,18 @@
+{
+  "name": "聊大外卖",
+  "appid": "",
+  "description": "聊城大学校园外卖用户端",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "touristappid",
+    "setting": { "urlCheck": false, "es6": true, "minified": true },
+    "requiredPrivateInfos": ["getLocation", "chooseLocation"],
+    "permission": {
+      "scope.userLocation": { "desc": "用于判断收货地址是否在校园配送范围内" }
+    },
+    "usingComponents": true
+  },
+  "vueVersion": "3"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "聊大外卖工作台",
+  "appid": "",
+  "description": "商家 / 骑手工作台",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "touristappid",
+    "setting": { "urlCheck": false, "es6": true, "minified": true },
+    "requiredPrivateInfos": ["getLocation"],
+    "permission": {
+      "scope.userLocation": { "desc": "用于计算配送距离与上报配送位置" }
+    },
+    "usingComponents": true
+  },
+  "vueVersion": "3"
+}

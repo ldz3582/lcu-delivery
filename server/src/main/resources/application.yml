@@ -1,0 +1,70 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: lcu-delivery
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/lcu_delivery?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:lcu}
+    password: ${DB_PASSWORD:lcu123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 4
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+app:
+  jwt-secret: ${JWT_SECRET:lcu-delivery-dev-secret-key-change-in-production-32}
+  token-expire-hours: 168
+  # 本地/内测：跳过真实微信登录与支付，便于无商户号时跑通链路；生产必须关掉
+  mock-login: ${APP_MOCK_LOGIN:true}
+  mock-pay: ${APP_MOCK_PAY:true}
+  # 提交订单时是否强制围栏校验
+  fence-enforce: ${APP_FENCE_ENFORCE:true}
+  # T+N 结算冻结天数
+  settle-freeze-days: ${APP_SETTLE_FREEZE_DAYS:1}
+
+wechat:
+  miniapp:
+    appid: ${WX_USER_APPID:}
+    secret: ${WX_USER_SECRET:}
+    work-appid: ${WX_WORK_APPID:}
+    work-secret: ${WX_WORK_SECRET:}
+  pay:
+    mch-id: ${WXPAY_MCH_ID:}
+    serial-no: ${WXPAY_MCH_SERIAL_NO:}
+    api-v3-key: ${WXPAY_API_V3_KEY:}
+    private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
+    notify-url: ${WXPAY_NOTIFY_URL:}
+
+logging:
+  level:
+    root: info
+    com.lcu.delivery: debug
