@@ -46,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, type Category, type ShopCard } from '../../api'
 import { ensureLogin } from '../../utils/auth'
@@ -58,7 +58,8 @@ const keyword = ref('')
 const campus = ref(0)
 const loading = ref(false)
 
-const campusName = () => ''
+const CAMPUS_LABELS = ['全部校区', '东校区', '西校区']
+const campusName = computed(() => CAMPUS_LABELS[campus.value] || CAMPUS_LABELS[0])
 
 function fen(v: number) {
   return (v / 100).toFixed(2) + ' 元'

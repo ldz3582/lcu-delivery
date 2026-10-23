@@ -26,13 +26,30 @@ export interface RequestOptions {
   showError?: boolean
 }
 
+/**
+ * GET 请求里 uni.request 会把 undefined 序列化成字符串 "undefined" 拼进 URL，
+ * 后端 @RequestParam 收到 "undefined" 会抛类型转换异常（500）。这里统一剔除空值。
+ */
+function compact(data: any, dropEmptyString: boolean) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data
+  const out: Record<string, any> = {}
+  Object.keys(data).forEach((k) => {
+    const v = data[k]
+    if (v === undefined || v === null) return
+    if (dropEmptyString && v === '') return
+    out[k] = v
+  })
+  return out
+}
+
 export function request<T = any>(options: RequestOptions): Promise<T> {
   return new Promise((resolve, reject) => {
     const token = getToken()
+    const method = (options.method || 'GET').toUpperCase()
     uni.request({
       url: BASE_URL + options.url,
-      method: (options.method || 'GET') as any,
-      data: options.data,
+      method: method as any,
+      data: compact(options.data, method === 'GET'),
       timeout: 15000,
       header: {
         'Content-Type': 'application/json',

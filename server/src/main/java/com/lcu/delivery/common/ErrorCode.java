@@ -13,6 +13,7 @@ public final class ErrorCode {
     public static final int STOCK = 2002;
     public static final int SHOP_CLOSED = 2003;
     public static final int MIN_AMOUNT = 2004;
+    public static final int IDENTITY_REQUIRED = 2005;
     public static final int PAY_FAILED = 4001;
 
     private ErrorCode() {

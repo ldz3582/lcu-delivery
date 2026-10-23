@@ -29,6 +29,15 @@ public class AuthController {
         return Result.ok(authService.login(req.code()));
     }
 
+    public record StuLoginReq(String stuNo) {
+    }
+
+    /** 学号/工号登录（注册）：演示与本地环境使用 */
+    @PostMapping("/stu-login")
+    public Result<AuthService.LoginResp> stuLogin(@RequestBody StuLoginReq req) {
+        return Result.ok(authService.stuLogin(req.stuNo()));
+    }
+
     @PostMapping("/mock-login")
     public Result<AuthService.LoginResp> mockLogin(@RequestBody MockLoginReq req) {
         return Result.ok(authService.mockLogin(req.openid(), req.role()));

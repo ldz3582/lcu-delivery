@@ -11,6 +11,7 @@ import com.lcu.delivery.config.AppProperties;
 import com.lcu.delivery.modules.admin.SysConfigService;
 import com.lcu.delivery.modules.cart.CartService;
 import com.lcu.delivery.modules.fence.FenceService;
+import com.lcu.delivery.modules.user.IdentityService;
 import com.lcu.delivery.modules.order.entity.Order;
 import com.lcu.delivery.modules.order.entity.OrderItem;
 import com.lcu.delivery.modules.order.entity.OrderStatusLog;
@@ -51,6 +52,7 @@ public class OrderService {
     private final CartService cartService;
     private final AddressService addressService;
     private final FenceService fenceService;
+    private final IdentityService identityService;
     private final ShopService shopService;
     private final SysConfigService config;
     private final AppProperties app;
@@ -59,7 +61,7 @@ public class OrderService {
 
     public OrderService(OrderMapper orderMapper, OrderItemMapper itemMapper, OrderStatusLogMapper logMapper,
                         ProductMapper productMapper, CartService cartService, AddressService addressService,
-                        FenceService fenceService, ShopService shopService, SysConfigService config,
+                        FenceService fenceService, IdentityService identityService, ShopService shopService, SysConfigService config,
                         AppProperties app, SettlementService settlementService) {
         this.orderMapper = orderMapper;
         this.itemMapper = itemMapper;
@@ -68,6 +70,7 @@ public class OrderService {
         this.cartService = cartService;
         this.addressService = addressService;
         this.fenceService = fenceService;
+        this.identityService = identityService;
         this.shopService = shopService;
         this.config = config;
         this.app = app;
@@ -83,6 +86,7 @@ public class OrderService {
         if (req.shopId() == null || req.addressId() == null) {
             throw new BizException(ErrorCode.PARAM, "缺少店铺或收货地址");
         }
+        identityService.requireVerified(userId);
         Shop shop = shopService.require(req.shopId());
         CartService.Bill bill = cartService.calculate(req.shopId(), req.items());
         if (!bill.reachMin()) {

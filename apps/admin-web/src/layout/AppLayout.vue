@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
   Bicycle,
+  User,
   DataBoard,
   Document,
   Money,
@@ -23,6 +24,7 @@ const activeMenu = computed(() => route.path)
 
 const menus = [
   { path: '/overview', label: '概览', icon: DataBoard },
+  { path: '/users', label: '用户管理', icon: User },
   { path: '/shops', label: '商家审核', icon: Shop },
   { path: '/riders', label: '骑手审核', icon: Bicycle },
   { path: '/orders', label: '订单', icon: Document },

@@ -1,0 +1,32 @@
+{
+  "pages": [
+    { "path": "pages/launch/index", "style": { "navigationBarTitleText": "聊大外卖", "navigationStyle": "custom" } },
+    { "path": "pages/login/index", "style": { "navigationBarTitleText": "选择身份", "navigationStyle": "custom" } },
+
+    { "path": "pages/index/index", "style": { "navigationBarTitleText": "聊大外卖", "enablePullDownRefresh": true } },
+    { "path": "pages/shop/detail", "style": { "navigationBarTitleText": "店铺" } },
+    { "path": "pages/cart/cart", "style": { "navigationBarTitleText": "购物车" } },
+    { "path": "pages/order/list", "style": { "navigationBarTitleText": "我的订单" } },
+    { "path": "pages/order/detail", "style": { "navigationBarTitleText": "订单详情" } },
+    { "path": "pages/address/list", "style": { "navigationBarTitleText": "收货地址" } },
+    { "path": "pages/address/edit", "style": { "navigationBarTitleText": "编辑地址" } },
+    { "path": "pages/address/pick", "style": { "navigationBarTitleText": "地图选点" } },
+
+    { "path": "pages/merchant/orders", "style": { "navigationBarTitleText": "商家接单", "enablePullDownRefresh": true } },
+    { "path": "pages/merchant/products", "style": { "navigationBarTitleText": "菜品管理" } },
+    { "path": "pages/merchant/shop", "style": { "navigationBarTitleText": "店铺设置" } },
+
+    { "path": "pages/rider/pool", "style": { "navigationBarTitleText": "抢单大厅", "enablePullDownRefresh": true } },
+    { "path": "pages/rider/orders", "style": { "navigationBarTitleText": "我的配送", "enablePullDownRefresh": true } },
+    { "path": "pages/rider/profile", "style": { "navigationBarTitleText": "骑手中心" } },
+
+
+    { "path": "pages/mine/index", "style": { "navigationBarTitleText": "我的" } }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "聊大外卖",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f5f6f8"
+  }
+}

@@ -29,6 +29,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { api, type OrderCard } from '../../api'
+import { ensureLogin } from '../../utils/auth'
 
 const tabs = [
   { label: '全部', value: undefined },
@@ -57,7 +58,10 @@ function go(id: number) {
   uni.navigateTo({ url: `/pages/order/detail?id=${id}` })
 }
 
-onShow(load)
+onShow(async () => {
+  await ensureLogin()
+  await load()
+})
 </script>
 
 <style scoped>

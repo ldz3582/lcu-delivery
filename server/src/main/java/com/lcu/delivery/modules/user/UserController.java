@@ -27,6 +27,7 @@ public class UserController {
         map.put("avatar", user.getAvatar());
         map.put("phoneMask", user.getPhoneMask());
         map.put("role", user.getRole());
+        map.put("identityStatus", user.getIdentityStatus() == null ? 0 : user.getIdentityStatus());
         return Result.ok(map);
     }
 

@@ -40,6 +40,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { api } from '../../api'
+import { ensureLogin } from '../../utils/auth'
 
 const order = ref<any>(null)
 let orderId = 0
@@ -97,8 +98,11 @@ onLoad((q: any) => {
   orderId = Number(q?.id)
 })
 
-onShow(() => {
-  if (orderId) load()
+onShow(async () => {
+  if (orderId) {
+    await ensureLogin()
+    load()
+  }
 })
 </script>
 

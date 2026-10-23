@@ -7,6 +7,7 @@ import com.lcu.delivery.common.ErrorCode;
 import com.lcu.delivery.common.JwtService;
 import com.lcu.delivery.config.AppProperties;
 import com.lcu.delivery.config.WechatProperties;
+import com.lcu.delivery.modules.user.IdentityService;
 import com.lcu.delivery.modules.user.entity.User;
 import com.lcu.delivery.modules.user.mapper.UserMapper;
 import org.springframework.stereotype.Service;
@@ -21,14 +22,16 @@ public class AuthService {
     private static final Set<String> ROLES = Set.of("USER", "MERCHANT", "RIDER", "ADMIN");
 
     private final UserMapper userMapper;
+    private final IdentityService identityService;
     private final JwtService jwtService;
     private final WechatClient wechatClient;
     private final AppProperties app;
     private final WechatProperties wechat;
 
-    public AuthService(UserMapper userMapper, JwtService jwtService, WechatClient wechatClient,
-                       AppProperties app, WechatProperties wechat) {
+    public AuthService(UserMapper userMapper, IdentityService identityService, JwtService jwtService,
+                       WechatClient wechatClient, AppProperties app, WechatProperties wechat) {
         this.userMapper = userMapper;
+        this.identityService = identityService;
         this.jwtService = jwtService;
         this.wechatClient = wechatClient;
         this.app = app;
@@ -72,6 +75,25 @@ public class AuthService {
         user.setRole(normalized);
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);
+        return toResp(user);
+    }
+
+    /**
+     * 学号/工号登录（等同于注册）：本地/演示环境用，openid 由学号派生，同一个学号永远进同一个账号。
+     * 登录成功即完成校内身份核验。
+     */
+    @Transactional
+    public LoginResp stuLogin(String stuNo) {
+        if (!app.mockLogin()) {
+            throw new BizException(ErrorCode.FORBIDDEN, "当前环境未开启学号登录");
+        }
+        String no = stuNo == null ? "" : stuNo.trim();
+        if (!no.matches("[A-Za-z0-9]{6,20}")) {
+            throw new BizException(ErrorCode.PARAM, "学号/工号格式不正确（6~20 位字母或数字）");
+        }
+        String openid = "stu_" + IdentityService.sha256(no).substring(0, 24);
+        User user = upsert(openid, "USER");
+        identityService.verify(user.getId(), no);
         return toResp(user);
     }
 

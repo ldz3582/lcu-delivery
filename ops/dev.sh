@@ -18,7 +18,7 @@ PIDFILE="/tmp/lcu-delivery.pid"
 if [ "${1:-}" = "stop" ]; then
   docker compose down
   [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null || true
-  pid=$(lsof -ti:8080 2>/dev/null | head -1); [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+  pid=$(lsof -ti:8080 -sTCP:LISTEN 2>/dev/null | head -1); [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
   rm -f "$PIDFILE"
   echo "已停止"
   exit 0
@@ -35,12 +35,14 @@ for i in $(seq 1 40); do
 done
 
 # 先停掉占用 8080 的旧进程：否则重新打包会覆盖 jar，旧进程再加载类会 ClassNotFoundException
-old=$(lsof -ti:8080 2>/dev/null | head -1)
+# 注意必须加 -sTCP:LISTEN：不加的话 lsof 会把「连过 8080 的客户端」也列出来
+# （比如微信开发者工具），结果杀错进程，旧后端继续占端口，新后端起不来。
+old=$(lsof -ti:8080 -sTCP:LISTEN 2>/dev/null | head -1)
 if [ -n "$old" ]; then
   echo "▶ 停止旧后端进程 $old"
   kill "$old" 2>/dev/null || true
   for i in $(seq 1 10); do
-    lsof -ti:8080 >/dev/null 2>&1 || break
+    lsof -ti:8080 -sTCP:LISTEN >/dev/null 2>&1 || break
     sleep 1
   done
 fi

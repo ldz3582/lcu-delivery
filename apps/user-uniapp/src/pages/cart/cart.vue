@@ -52,6 +52,7 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { api, type Address, type Bill } from '../../api'
 import { useCartStore } from '../../stores/cart'
+import { ensureLogin } from '../../utils/auth'
 
 const cart = useCartStore()
 const bill = ref<Bill | null>(null)
@@ -115,6 +116,7 @@ async function submit() {
 }
 
 onShow(async () => {
+  await ensureLogin()
   await loadAddress()
   refresh()
 })

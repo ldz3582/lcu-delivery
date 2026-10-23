@@ -6,6 +6,7 @@ import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -25,6 +26,16 @@ public class GlobalExceptionHandler {
             msg = ex.getBindingResult().getFieldError().getDefaultMessage();
         }
         return Result.fail(ErrorCode.PARAM, msg);
+    }
+
+    /**
+     * 查询参数类型转换失败（典型场景：前端把 undefined 序列化成 "undefined" 拼进 URL）。
+     * 返回 400 参数错误，而不是 500，避免把调用方问题暴露成服务端故障。
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public Result<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("参数类型不匹配: {} = {}", e.getName(), e.getValue());
+        return Result.fail(ErrorCode.PARAM, "参数 " + e.getName() + " 格式不正确");
     }
 
     @ExceptionHandler(Exception.class)

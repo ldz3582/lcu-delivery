@@ -91,6 +91,43 @@ public class AdminService {
         return m;
     }
 
+
+    /** 用户列表：注册用户 → 管理端可见（含核验状态与下单数） */
+    public PageResult<Map<String, Object>> users(String keyword, int page, int size) {
+        int p = Math.max(page, 1);
+        int sz = Math.min(Math.max(size, 1), 100);
+        StringBuilder where = new StringBuilder(" WHERE u.deleted_at IS NULL");
+        List<Object> args = new ArrayList<>();
+        if (keyword != null && !keyword.isBlank()) {
+            where.append(" AND (u.nickname LIKE ? OR u.openid LIKE ?)");
+            args.add("%" + keyword.trim() + "%");
+            args.add("%" + keyword.trim() + "%");
+        }
+        long total = jdbc.queryForObject("SELECT COUNT(*) FROM `user` u" + where, Long.class, args.toArray());
+
+        List<Object> pageArgs = new ArrayList<>(args);
+        pageArgs.add(sz);
+        pageArgs.add((p - 1) * sz);
+        List<Map<String, Object>> rows = jdbc.query(
+                "SELECT u.id, u.openid, u.nickname, u.role, u.phone_mask, u.identity_status, u.created_at, "
+                        + " (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS order_count "
+                        + "FROM `user` u" + where + " ORDER BY u.id DESC LIMIT ? OFFSET ?",
+                (rs, i) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", rs.getLong("id"));
+                    m.put("openid", rs.getString("openid"));
+                    m.put("nickname", rs.getString("nickname"));
+                    m.put("role", rs.getString("role"));
+                    m.put("phoneMask", rs.getString("phone_mask"));
+                    m.put("identityStatus", rs.getInt("identity_status"));
+                    m.put("orderCount", rs.getLong("order_count"));
+                    m.put("createdAt", rs.getTimestamp("created_at") == null ? null
+                            : rs.getTimestamp("created_at").toLocalDateTime().toString());
+                    return m;
+                }, pageArgs.toArray());
+        return new PageResult<>(rows, total, p, sz);
+    }
+
     public PageResult<Map<String, Object>> shops(Integer auditStatus, int page, int size) {
         Page<Shop> p = shopMapper.selectPage(new Page<>(page, Math.min(size, 50)),
                 Wrappers.<Shop>lambdaQuery()

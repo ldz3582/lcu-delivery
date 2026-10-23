@@ -17,6 +17,12 @@ public class User {
     private String nickname;
     private String avatar;
     private String phoneMask;
+    /** 学号/工号密文（AES-GCM），identity_status=1 表示已核验 */
+    private String stuNoEnc;
+    /** 学号/工号 SHA-256，用于查重 */
+    private String stuNoHash;
+    /** 0 未核验 / 1 已核验 */
+    private Integer identityStatus;
     /** USER / MERCHANT / RIDER / ADMIN */
     private String role;
     private Integer status;
@@ -66,6 +72,30 @@ public class User {
 
     public String getPhoneMask() {
         return phoneMask;
+    }
+
+    public String getStuNoEnc() {
+        return stuNoEnc;
+    }
+
+    public void setStuNoEnc(String stuNoEnc) {
+        this.stuNoEnc = stuNoEnc;
+    }
+
+    public String getStuNoHash() {
+        return stuNoHash;
+    }
+
+    public void setStuNoHash(String stuNoHash) {
+        this.stuNoHash = stuNoHash;
+    }
+
+    public Integer getIdentityStatus() {
+        return identityStatus;
+    }
+
+    public void setIdentityStatus(Integer identityStatus) {
+        this.identityStatus = identityStatus;
     }
 
     public void setPhoneMask(String phoneMask) {

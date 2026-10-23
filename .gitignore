@@ -5,3 +5,4 @@ dist/
 .env
 server/certs/
 .DS_Store
+ops/data/

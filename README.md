@@ -8,8 +8,9 @@
 lcu-delivery/
 ├── server/                 Spring Boot 3.5 + MyBatis-Plus 后端（JDK 21 目标字节码）
 ├── apps/
-│   ├── user-uniapp/        用户端小程序（uni-app Vue3，8 个页面）
-│   ├── workbench-uniapp/   商家 / 骑手工作台（uni-app Vue3，7 个页面）
+│   ├── lcu-mobile/         ★ 统一小程序：用户/商家/骑手/管理员 四端合一（19 个页面）
+│   ├── user-uniapp/        [已废弃] 原用户端，已并入 lcu-mobile
+│   ├── workbench-uniapp/   [已废弃] 原商家/骑手工作台，已并入 lcu-mobile
 │   └── admin-web/          管理后台（Vue3 + Element Plus，7 个页面）
 ├── ops/
 │   ├── docker-compose.yml  MySQL 8.4 + Redis 7.4 + MinIO
@@ -22,6 +23,27 @@ lcu-delivery/
     └── gen_entities.py     从字段定义生成实体/Mapper
 ```
 
+## 统一小程序（lcu-mobile）
+
+一个小程序，内部切换四种身份，**不再需要装两个**：
+
+| 身份 | 入口首页 | 底部导航 |
+| --- | --- | --- |
+| 用户 | `pages/index/index` | 首页 / 购物车 / 订单 / 我的 |
+| 商家 | `pages/merchant/orders` | 接单 / 菜品 / 店铺 / 我的 |
+| 骑手 | `pages/rider/pool` | 抢单 / 配送 / 收益 / 我的 |
+
+切换方式：「我的 → 切换身份」，或登录页直接选身份。
+
+> **管理员只在 web 后台**（`apps/admin-web`，http://127.0.0.1:5174），
+> 小程序端已彻底移除管理员身份与相关页面，只服务 用户 / 商家 / 骑手。
+> 用户登录后在后台「用户管理」页可见（昵称、openid、核验状态、下单数）。
+
+> 微信原生 tabBar 的页面是编译期写死的，做不到四套导航，所以底部栏用
+> `components/AppTabBar.vue` + `uni.reLaunch` 自己实现；每个页面在 `onShow`
+> 里用 `guard(role)` 做身份守卫，越权会自动跳回自己的首页。
+
+
 ## 接入真实微信小程序（拿 AppID 之后）
 
 ```bash
@@ -30,6 +52,27 @@ lcu-delivery/
 
 完整步骤（注册、拿密钥、开发者工具、域名备案、上线四件套、错误码）见
 [`docs/接入微信公众平台.md`](docs/接入微信公众平台.md)。
+
+## 平台开关（后台即时生效，不用重启）
+
+| 配置键 | 默认 | 作用 |
+| --- | --- | --- |
+| `feature.identity_check` | `false` | 校内身份核验。关：不限制非本校人员注册下单；开：未核验用户下单返回 `2005` |
+| `feature.address_parse` | `true` | 地址粘贴解析 |
+| `delivery.fence_enforce` | `true` | 下单强制校验校园围栏，超出返回 `2001` |
+| `delivery.peak_bonus` 等 | — | 计价、结算、并发上限等 |
+
+改法：管理后台「配置」页直接切开关（`el-switch`），或
+`PUT /api/admin/configs {"key":"feature.identity_check","value":"true"}`。
+`SysConfigService` 更新时会**同时写库和内存缓存**，下一个请求立即生效。
+
+### 校内身份核验
+
+- 登录页启动时调 `GET /api/identity/config`（公开接口），开关开启才显示「学号/工号」输入框
+- 核验接口 `POST /api/identity/verify {"stuNo":"..."}`：6~20 位字母数字，AES-GCM 加密存 `stu_no_enc`，
+  同时存 `stu_no_hash`（SHA-256 + 唯一索引）用于查重——密文含随机 IV 不可比较，必须用哈希
+- 拦截点在**下单**而不是登录，避免把用户卡在登录环节
+- 「我的」页可随时补核验，显示脱敏号码（`2021****4567`）
 
 ## 快速开始
 

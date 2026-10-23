@@ -35,6 +35,13 @@ public class AdminController {
         return Result.ok(adminService.overview());
     }
 
+    @GetMapping("/users")
+    public Result<PageResult<Map<String, Object>>> users(@RequestParam(required = false) String keyword,
+                                                         @RequestParam(defaultValue = "1") int page,
+                                                         @RequestParam(defaultValue = "20") int size) {
+        return Result.ok(adminService.users(keyword, page, size));
+    }
+
     @GetMapping("/shops")
     public Result<PageResult<Map<String, Object>>> shops(@RequestParam(required = false) Integer auditStatus,
                                                          @RequestParam(defaultValue = "1") int page,

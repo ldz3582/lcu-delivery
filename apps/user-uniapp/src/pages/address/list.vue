@@ -28,6 +28,7 @@
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { api, type Address } from '../../api'
+import { ensureLogin } from '../../utils/auth'
 
 const list = ref<Address[]>([])
 const picking = ref(false)
@@ -66,7 +67,10 @@ async function remove(id: number) {
 onLoad((q: any) => {
   picking.value = q?.pick === '1'
 })
-onShow(load)
+onShow(async () => {
+  await ensureLogin()
+  await load()
+})
 </script>
 
 <style scoped>

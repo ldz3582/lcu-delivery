@@ -96,6 +96,22 @@ export function login(username: string, password: string) {
   return post<LoginResp>('/admin/login', { username, password })
 }
 
+export interface AdminUser {
+  id: number
+  openid: string
+  nickname: string
+  role: string
+  phoneMask: string | null
+  identityStatus: number
+  orderCount: number
+  createdAt: string | null
+}
+
+/** 用户列表 */
+export function getUsers(params: { keyword?: string; page: number; size: number }) {
+  return get<PageResult<AdminUser>>('/admin/users', params as Record<string, unknown>)
+}
+
 /** 概览统计 */
 export function getOverview() {
   return get<Overview>('/admin/overview')

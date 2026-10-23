@@ -34,6 +34,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { api } from '../../api'
+import { ensureLogin } from '../../utils/auth'
 
 const profile = ref<any>(null)
 
@@ -52,6 +53,7 @@ function goWorkbench(role: 'MERCHANT' | 'RIDER') {
 
 onShow(async () => {
   try {
+    await ensureLogin()
     profile.value = await api.profile()
   } catch (e) {
     console.warn(e)
