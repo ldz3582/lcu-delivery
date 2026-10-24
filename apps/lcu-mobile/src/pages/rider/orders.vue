@@ -125,6 +125,7 @@ import {
   type RiderOrder
 } from '../../api'
 import { guard } from '../../utils/auth'
+import { openNavigation } from '../../utils/nav'
 import AppTabBar from '../../components/AppTabBar.vue'
 
 type TabValue = number | 'incident'
@@ -204,23 +205,27 @@ function switchTab(v: TabValue) {
 }
 
 function navShop(o: RiderOrder) {
-  if (!o.shopLng || !o.shopLat) return
-  uni.openLocation({
+  if (!o.shopLng || !o.shopLat) {
+    uni.showToast({ title: '这家店还没填坐标', icon: 'none' })
+    return
+  }
+  openNavigation({
     latitude: Number(o.shopLat),
     longitude: Number(o.shopLng),
-    name: o.shopName,
-    scale: 16
+    name: o.shopName
   })
 }
 
 function navDest(o: RiderOrder) {
-  if (!o.lng || !o.lat) return
-  uni.openLocation({
+  if (!o.lng || !o.lat) {
+    uni.showToast({ title: '收货地址缺少坐标', icon: 'none' })
+    return
+  }
+  openNavigation({
     latitude: Number(o.lat),
     longitude: Number(o.lng),
     name: '收货点',
-    address: addressText(o.address),
-    scale: 16
+    address: addressText(o.address)
   })
 }
 

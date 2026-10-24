@@ -70,6 +70,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
+import { openNavigation } from '../../utils/nav'
 import { riderApi, ensureRiderApproved, type RiderDispatchedOrder, type RiderPoolItem } from '../../api'
 import { guard } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
@@ -190,12 +191,14 @@ function stopPolling() {
 }
 
 function navShop(o: RiderPoolItem) {
-  if (!o.shopLng || !o.shopLat) return
-  uni.openLocation({
+  if (!o.shopLng || !o.shopLat) {
+    uni.showToast({ title: '这家店还没填坐标', icon: 'none' })
+    return
+  }
+  openNavigation({
     latitude: Number(o.shopLat),
     longitude: Number(o.shopLng),
-    name: o.shopName,
-    scale: 16
+    name: o.shopName
   })
 }
 
