@@ -14,6 +14,8 @@ import {
   Ticket,
   FirstAidKit,
   ChatDotRound,
+  Warning,
+  CircleClose,
   Message,
   SwitchButton,
 } from '@element-plus/icons-vue'
@@ -37,6 +39,8 @@ const menus = [
   { path: '/withdrawals', label: '提现审核', icon: CreditCard },
   { path: '/coupons', label: '优惠券', icon: Ticket },
   { path: '/after-sales', label: '售后仲裁', icon: FirstAidKit },
+  { path: '/incidents', label: '配送异常', icon: Warning },
+  { path: '/penalties', label: '骑手处罚', icon: CircleClose },
   { path: '/reviews', label: '评价管理', icon: ChatDotRound },
   { path: '/notify-logs', label: '消息日志', icon: Message },
   { path: '/configs', label: '平台配置', icon: Setting },

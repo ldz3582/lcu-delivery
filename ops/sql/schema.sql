@@ -284,6 +284,9 @@ CREATE TABLE IF NOT EXISTS `rider` (
   `id_card_back`  VARCHAR(512) DEFAULT NULL,
   `student_card`  VARCHAR(512) DEFAULT NULL,
   `agreement_url` VARCHAR(512) DEFAULT NULL COMMENT '电子兼职协议存证',
+  `agreement_signed_at` DATETIME DEFAULT NULL COMMENT '协议签署时间',
+  `insurance_no`  VARCHAR(64) DEFAULT NULL COMMENT '意外险保单号',
+  `reject_reason` VARCHAR(255) DEFAULT NULL COMMENT '审核驳回原因',
   `audit_status`  TINYINT NOT NULL DEFAULT 0 COMMENT '0待审 1通过 2驳回',
   `work_status`   TINYINT NOT NULL DEFAULT 0 COMMENT '0离线 1接单中 2忙碌',
   `deposit`       INT NOT NULL DEFAULT 0 COMMENT '保证金（分）',
@@ -316,6 +319,21 @@ CREATE TABLE IF NOT EXISTS `delivery_task` (
   UNIQUE KEY `uk_order` (`order_id`),
   KEY `idx_rider_status` (`rider_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='配送任务';
+
+CREATE TABLE IF NOT EXISTS `delivery_incident` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `order_id`   BIGINT UNSIGNED NOT NULL,
+  `rider_id`   BIGINT UNSIGNED NOT NULL,
+  `type`       TINYINT NOT NULL COMMENT '1联系不上用户 2餐品撒漏 3地址错误 4其他',
+  `remark`     VARCHAR(500) DEFAULT NULL,
+  `images`     JSON DEFAULT NULL,
+  `status`     TINYINT NOT NULL DEFAULT 0 COMMENT '0待处理 1已处理',
+  `handle_remark` VARCHAR(255) DEFAULT NULL,
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_rider` (`rider_id`,`created_at`),
+  KEY `idx_status` (`status`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='配送异常上报';
 
 CREATE TABLE IF NOT EXISTS `rider_location` (
   `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -515,6 +533,18 @@ CREATE TABLE IF NOT EXISTS `admin_user` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='后台账号';
+
+CREATE TABLE IF NOT EXISTS `rider_penalty` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `rider_id`   BIGINT UNSIGNED NOT NULL,
+  `order_id`   BIGINT UNSIGNED DEFAULT NULL,
+  `type`       TINYINT NOT NULL COMMENT '1超时 2差评 3违规操作',
+  `amount`     INT NOT NULL COMMENT '扣罚金额（分）',
+  `remark`     VARCHAR(255) DEFAULT NULL,
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_rider` (`rider_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='骑手处罚记录';
 
 CREATE TABLE IF NOT EXISTS `notify_log` (
   `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

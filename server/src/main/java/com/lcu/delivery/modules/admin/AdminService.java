@@ -208,20 +208,34 @@ public class AdminService {
             m.put("workStatus", r.getWorkStatus());
             m.put("score", r.getScore());
             m.put("totalOrders", r.getTotalOrders());
+            m.put("timeoutOrders", r.getTimeoutOrders());
+            m.put("idCardFront", r.getIdCardFront());
+            m.put("idCardBack", r.getIdCardBack());
+            m.put("studentCard", r.getStudentCard());
+            m.put("agreementUrl", r.getAgreementUrl());
+            m.put("agreementSignedAt", r.getAgreementSignedAt() == null ? null : r.getAgreementSignedAt().toString());
+            m.put("insuranceNo", r.getInsuranceNo());
+            m.put("rejectReason", r.getRejectReason());
+            m.put("createdAt", r.getCreatedAt() == null ? null : r.getCreatedAt().toString());
             rows.add(m);
         }
         return new PageResult<>(rows, p.getTotal(), page, size);
     }
 
     @Transactional
-    public void auditRider(Long riderId, boolean pass) {
+    public void auditRider(Long riderId, boolean pass, String reason) {
         Rider rider = riderMapper.selectById(riderId);
         if (rider == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "骑手不存在");
         }
-        rider.setAuditStatus(pass ? 1 : 2);
-        rider.setUpdatedAt(LocalDateTime.now());
-        riderMapper.updateById(rider);
+        String reject = pass ? null
+                : (reason == null || reason.isBlank() ? "资料不齐，请补充后重新提交" : reason);
+        // 通过时要显式清空驳回原因（updateById 会跳过 null）
+        riderMapper.update(null, Wrappers.<Rider>lambdaUpdate()
+                .eq(Rider::getId, riderId)
+                .set(Rider::getAuditStatus, pass ? 1 : 2)
+                .set(Rider::getRejectReason, reject)
+                .set(Rider::getUpdatedAt, LocalDateTime.now()));
     }
 
     public PageResult<Map<String, Object>> orders(Integer status, String keyword, int page, int size) {

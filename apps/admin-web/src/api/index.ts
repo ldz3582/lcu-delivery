@@ -52,6 +52,23 @@ export interface Rider {
   workStatus: number
   score: number
   totalOrders: number
+  /** 超时单数 */
+  timeoutOrders?: number
+  /** 身份证人像面 */
+  idCardFront?: string | null
+  /** 身份证国徽面 */
+  idCardBack?: string | null
+  /** 校园卡 / 学生证 */
+  studentCard?: string | null
+  /** 兼职协议文件地址 */
+  agreementUrl?: string | null
+  /** 协议签署时间 */
+  agreementSignedAt?: string | null
+  /** 意外险保单号 */
+  insuranceNo?: string | null
+  /** 驳回原因（通过后清空） */
+  rejectReason?: string | null
+  createdAt?: string | null
 }
 
 export interface Order {
@@ -137,9 +154,9 @@ export function getRiders(params: { auditStatus?: number | ''; page: number; siz
   return get<PageResult<Rider>>('/admin/riders', params as Record<string, unknown>)
 }
 
-/** 骑手审核 */
-export function auditRider(id: number, pass: boolean) {
-  return post<void>(`/admin/riders/${id}/audit`, { pass })
+/** 骑手审核：驳回时 reason 必填，通过时后端会清空驳回原因 */
+export function auditRider(id: number, pass: boolean, reason = '') {
+  return post<void>(`/admin/riders/${id}/audit`, { pass, reason })
 }
 
 /** 订单列表 */
@@ -162,7 +179,10 @@ export interface Withdrawal {
   /** 2 商家（当前只有商家提现） */
   ownerType: number
   ownerId: number
+  /** 商家名（ownerType=2） */
   shopName: string | null
+  /** 骑手昵称（ownerType=3） */
+  riderName?: string | null
   /** 提现金额，单位分 */
   amount: number
   /** 0 待审核 / 1 打款中 / 2 已到账 / 3 已驳回 */
@@ -187,6 +207,66 @@ export function auditWithdrawal(id: number, pass: boolean, reason = '') {
 /** 手动结算单笔结算（正常由定时任务自动结算，用于演示/应急） */
 export function settleSettlement(id: number) {
   return post<void>(`/admin/settlements/${id}/settle`)
+}
+
+export interface Incident {
+  id: number
+  orderId: number
+  orderNo: string | null
+  shopName: string | null
+  /** 1 联系不上用户 / 2 餐品撒漏 / 3 地址错误 / 4 其他 */
+  type: number
+  typeText: string
+  remark: string
+  images: string[]
+  /** 0 待处理 / 1 已处理 */
+  status: number
+  statusText: string
+  handleRemark: string | null
+  createdAt: string | null
+}
+
+/** 配送异常上报列表（后端返回数组，不分页） */
+export function getIncidents(params: { status?: number }) {
+  return get<Incident[]>('/admin/incidents', params as Record<string, unknown>)
+}
+
+/** 处置配送异常 */
+export function handleIncident(id: number, remark: string) {
+  return post<void>(`/admin/incidents/${id}/handle`, { remark })
+}
+
+export interface Penalty {
+  id: number
+  riderId: number
+  orderId: number | null
+  orderNo: string | null
+  /** 1 超时 / 2 差评 / 3 违规操作 */
+  type: number
+  typeText: string
+  /** 扣罚金额，单位分 */
+  amount: number
+  remark: string | null
+  createdAt: string | null
+}
+
+/** 骑手处罚记录 */
+export function getPenalties(params: { riderId?: number }) {
+  return get<Penalty[]>('/admin/penalties', params as Record<string, unknown>)
+}
+
+export interface PenaltyPayload {
+  /** 1 超时 / 2 差评 / 3 违规操作 */
+  type: number
+  /** 扣罚金额，单位分 */
+  amount: number
+  remark: string
+  orderId?: number
+}
+
+/** 给骑手开罚单 */
+export function createPenalty(riderId: number, data: PenaltyPayload) {
+  return post<number>(`/admin/riders/${riderId}/penalty`, data)
 }
 
 /** 平台配置列表 */

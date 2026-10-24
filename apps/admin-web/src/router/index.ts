@@ -82,6 +82,18 @@ const router = createRouter({
           meta: { title: '评价管理' },
         },
         {
+          path: 'incidents',
+          name: 'incidents',
+          component: () => import('@/views/IncidentsView.vue'),
+          meta: { title: '配送异常' },
+        },
+        {
+          path: 'penalties',
+          name: 'penalties',
+          component: () => import('@/views/PenaltiesView.vue'),
+          meta: { title: '骑手处罚' },
+        },
+        {
           path: 'notify-logs',
           name: 'notify-logs',
           component: () => import('@/views/NotifyLogsView.vue'),

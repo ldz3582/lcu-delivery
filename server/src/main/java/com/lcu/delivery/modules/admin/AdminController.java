@@ -67,7 +67,7 @@ public class AdminController {
 
     @PostMapping("/riders/{id}/audit")
     public Result<Void> auditRider(@PathVariable Long id, @RequestBody AuditReq req) {
-        adminService.auditRider(id, req.pass());
+        adminService.auditRider(id, req.pass(), req.reason());
         return Result.ok();
     }
 

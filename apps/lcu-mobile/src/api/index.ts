@@ -367,19 +367,140 @@ export async function ensureMerchantApproved(): Promise<boolean> {
 }
 
 // ---------------- 骑手端 ----------------
+/** 骑手入驻状态：没提交 applied=false；其余带审核状态、证件图、协议与保单信息 */
+export interface RiderStatus {
+  applied: boolean
+  riderId?: number; auditStatus?: number; auditText?: string; rejectReason?: string | null
+  phoneMask?: string; score?: number; totalOrders?: number
+  /** 驳回重提时展示的脱敏信息（后端不返回明文） */
+  realNameMask?: string; idCardMask?: string; stuNoMask?: string
+  workStatus?: number; maxConcurrent?: number
+  idCardFront?: string; idCardBack?: string; studentCard?: string
+  agreementSignedAt?: string; insuranceNo?: string | null
+}
+export interface RiderApplyReq {
+  /** 首次提交必填；驳回后重提可留空，后端沿用原值 */
+  realName?: string; idCard?: string; stuNo?: string; phone?: string
+  idCardFront?: string; idCardBack?: string; studentCard?: string
+  agreementUrl?: string; agreeProtocol: boolean; insuranceNo?: string
+}
+
 export interface RiderPoolItem {
   orderId: number; orderNo: string; shopName: string; deliveryFee: number
   riderIncome: number; address: string; distance?: number; readyAt?: string
+  shopLng?: number; shopLat?: number
+}
+
+/** 系统派给我的单（高峰时段派单，需在 expireSeconds 内确认） */
+export interface RiderDispatchedOrder {
+  orderId: number; orderNo: string; shopName: string
+  shopLng?: number; shopLat?: number
+  address?: string
+  riderIncome: number; dispatchedAt?: string; expireSeconds: number
+}
+
+/** 骑手「我的配送」订单（status 30 待取餐 / 40 配送中 / 50 已完成） */
+export interface RiderOrder {
+  orderId: number; orderNo: string; status: number; statusText: string
+  shopId?: number; shopName: string; shopLng?: number; shopLat?: number
+  /** 收货地址 JSON 字符串 */
+  address?: string
+  /** 收货点坐标（可能为空） */
+  lng?: number; lat?: number
+  riderIncome?: number; pickedAt?: string; deliveredAt?: string
+  /** 该单已上报异常条数 */
+  incident?: number
+}
+
+// ---------------- 骑手资金 ----------------
+export interface RiderWalletFlow {
+  id: number; bizType: string; bizNo?: string; direction: number
+  amount: number; balanceAfter?: number; remark?: string; createdAt?: string
+}
+export interface RiderWallet {
+  riderId: number; balance: number; frozen: number
+  totalIncome: number; todayIncome: number; monthIncome: number
+  totalPenalty: number; minWithdraw: number
+  score?: number; totalOrders?: number; timeoutOrders?: number
+  flows: RiderWalletFlow[]
+}
+export interface RiderRangeStats {
+  orderCount: number; income: number; avgIncome: number
+}
+export interface RiderSummary {
+  today: RiderRangeStats; week: RiderRangeStats; month: RiderRangeStats
+  settleFreezeDays?: number
+}
+export interface RiderSettlement {
+  id: number; orderId: number; orderNo?: string; goodsAmount: number
+  riderIncome: number; status: number; statusText: string
+  createdAt?: string; settleAt?: string
+}
+export interface RiderSettlementPage {
+  summary: { orderCount: number; pageIncome: number; pendingIncome: number }
+  list: RiderSettlement[]; total: number; page?: number; size?: number
+}
+export interface RiderPenalty {
+  id: number; riderId?: number; orderId?: number | null; orderNo?: string
+  type: number; typeText: string; amount: number; remark?: string; createdAt?: string
+}
+
+/** 配送异常上报记录 */
+export interface RiderIncident {
+  id: number; orderId: number; orderNo?: string; shopName?: string
+  type: number; typeText: string; remark?: string; images?: string[]
+  status: number; statusText: string; handleRemark?: string | null; createdAt?: string
 }
 
 export const riderApi = {
+  /** 入驻状态：没提交 / 待审核 / 已通过 / 已驳回（带原因） */
+  status: () => http.get<RiderStatus>('/api/rider/status'),
+  /** 提交/重新提交入驻申请；后端校验身份证/学号/手机/三张图/协议勾选 */
+  apply: (data: RiderApplyReq) =>
+    http.post<{ riderId: number; auditStatus: number }>('/api/rider/apply', data),
   profile: () => http.get<any>('/api/rider/profile'),
   pool: (lng?: number, lat?: number) => http.get<RiderPoolItem[]>('/api/rider/pool', { lng, lat }),
-  orders: () => http.get<any[]>('/api/rider/orders'),
+  /** 系统派给我的单（需骑手确认） */
+  dispatched: () => http.get<RiderDispatchedOrder[]>('/api/rider/dispatched'),
+  acceptDispatch: (orderId: number) => http.post(`/api/rider/dispatched/${orderId}/accept`),
+  rejectDispatch: (orderId: number) => http.post(`/api/rider/dispatched/${orderId}/reject`),
+  /** status: 30 待取餐 / 40 配送中 / 50 已完成；不传返回全部 */
+  orders: (status?: number) => http.get<RiderOrder[]>('/api/rider/orders', { status }),
+  /** 配送异常上报：type 1 联系不上用户 / 2 餐品撒漏 / 3 地址错误 / 4 其他 */
+  reportIncident: (orderId: number, data: { type: number; remark: string; images?: string[] }) =>
+    http.post<number>(`/api/rider/orders/${orderId}/incident`, data),
+  incidents: () => http.get<RiderIncident[]>('/api/rider/incidents'),
   grab: (id: number) => http.post(`/api/rider/orders/${id}/grab`),
   pickup: (id: number, photo?: string) => http.post(`/api/rider/orders/${id}/pickup`, { photo }),
   deliver: (id: number, photo?: string) => http.post(`/api/rider/orders/${id}/deliver`, { photo }),
-  location: (lng: number, lat: number, orderId?: number) => http.post('/api/rider/location', { lng, lat, accuracy: 15, orderId })
+  location: (lng: number, lat: number, orderId?: number) => http.post('/api/rider/location', { lng, lat, accuracy: 15, orderId }),
+
+  // ---- 资金 ----
+  wallet: () => http.get<RiderWallet>('/api/rider/wallet'),
+  summary: () => http.get<RiderSummary>('/api/rider/summary'),
+  /** 佣金明细（按单分页）+ 账单汇总 */
+  settlements: (params?: { page?: number; size?: number }) =>
+    http.get<RiderSettlementPage>('/api/rider/settlements', params),
+  withdrawals: () => http.get<Withdrawal[]>('/api/rider/withdrawals'),
+  /** amount 单位分；后端校验最低提现与余额 */
+  applyWithdraw: (amount: number) => http.post<number>('/api/rider/withdrawals', { amount }),
+  penalties: () => http.get<RiderPenalty[]>('/api/rider/penalties')
+}
+
+/**
+ * 骑手端准入守卫：没提交或审核未通过时 reLaunch 到入驻页，
+ * 避免直接打 /api/rider/pool 等接口报「还没有通过审核」。
+ * 状态查询失败时放行，避免网络抖动把人踢出骑手端。
+ */
+export async function ensureRiderApproved(): Promise<boolean> {
+  try {
+    const st = await riderApi.status()
+    if (st?.applied && st.auditStatus === 1) return true
+  } catch (e) {
+    return true
+  }
+  uni.reLaunch({ url: '/pages/rider/apply' })
+  return false
 }
 
 // ---------------- 管理员端 ----------------

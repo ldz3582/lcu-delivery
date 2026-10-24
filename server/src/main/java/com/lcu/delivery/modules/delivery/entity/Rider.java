@@ -17,7 +17,19 @@ public class Rider {
     private String realNameEnc;
     private String idCardEnc;
     private String stuNoEnc;
+    private String stuNoHash;
     private String phoneMask;
+    /** 身份证正面/反面、校园卡照片 */
+    private String idCardFront;
+    private String idCardBack;
+    private String studentCard;
+    /** 电子兼职协议存证与签署时间 */
+    private String agreementUrl;
+    private LocalDateTime agreementSignedAt;
+    /** 意外险保单号 */
+    private String insuranceNo;
+    /** 审核驳回原因 */
+    private String rejectReason;
     /** 0 待审 1 通过 2 驳回 */
     private Integer auditStatus;
     /** 0 离线 1 接单中 2 忙碌 */
@@ -76,6 +88,70 @@ public class Rider {
 
     public void setPhoneMask(String phoneMask) {
         this.phoneMask = phoneMask;
+    }
+
+    public String getStuNoHash() {
+        return stuNoHash;
+    }
+
+    public void setStuNoHash(String stuNoHash) {
+        this.stuNoHash = stuNoHash;
+    }
+
+    public String getIdCardFront() {
+        return idCardFront;
+    }
+
+    public void setIdCardFront(String idCardFront) {
+        this.idCardFront = idCardFront;
+    }
+
+    public String getIdCardBack() {
+        return idCardBack;
+    }
+
+    public void setIdCardBack(String idCardBack) {
+        this.idCardBack = idCardBack;
+    }
+
+    public String getStudentCard() {
+        return studentCard;
+    }
+
+    public void setStudentCard(String studentCard) {
+        this.studentCard = studentCard;
+    }
+
+    public String getAgreementUrl() {
+        return agreementUrl;
+    }
+
+    public void setAgreementUrl(String agreementUrl) {
+        this.agreementUrl = agreementUrl;
+    }
+
+    public LocalDateTime getAgreementSignedAt() {
+        return agreementSignedAt;
+    }
+
+    public void setAgreementSignedAt(LocalDateTime agreementSignedAt) {
+        this.agreementSignedAt = agreementSignedAt;
+    }
+
+    public String getInsuranceNo() {
+        return insuranceNo;
+    }
+
+    public void setInsuranceNo(String insuranceNo) {
+        this.insuranceNo = insuranceNo;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
     }
 
     public Integer getAuditStatus() {

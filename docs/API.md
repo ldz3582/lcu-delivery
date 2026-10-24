@@ -1,6 +1,6 @@
 # 接口清单
 
-共 107 个接口，前缀 `/api`，统一响应 `{code,msg,data}`，`code=0` 成功。
+共 123 个接口，前缀 `/api`，统一响应 `{code,msg,data}`，`code=0` 成功。
 鉴权：`Authorization: Bearer <token>`；未登录返回 401，越权返回 403。
 
 | 方法 | 路径 | 权限 | 模块 |
@@ -20,14 +20,18 @@
 | `PUT` | `/api/admin/coupons/{id}/status` | 管理员 | AdminCoupon |
 | `GET` | `/api/admin/fence` | 管理员 | Admin |
 | `PUT` | `/api/admin/fence` | 管理员 | Admin |
+| `GET` | `/api/admin/incidents` | 管理员 | AdminIncident |
+| `POST` | `/api/admin/incidents/{id}/handle` | 管理员 | AdminIncident |
 | `POST` | `/api/admin/login` | 公开 | Admin |
 | `GET` | `/api/admin/notify-logs` | 管理员 | Notify |
 | `GET` | `/api/admin/orders` | 管理员 | Admin |
 | `GET` | `/api/admin/overview` | 管理员 | Admin |
+| `GET` | `/api/admin/penalties` | 管理员 | AdminPenalty |
 | `GET` | `/api/admin/reviews` | 管理员 | Review |
 | `PUT` | `/api/admin/reviews/{id}/status` | 管理员 | Review |
 | `GET` | `/api/admin/riders` | 管理员 | Admin |
 | `POST` | `/api/admin/riders/{id}/audit` | 管理员 | Admin |
+| `POST` | `/api/admin/riders/{riderId}/penalty` | 管理员 | AdminPenalty |
 | `GET` | `/api/admin/settlements` | 管理员 | Admin |
 | `POST` | `/api/admin/settlements/{id}/settle` | 管理员 | Admin |
 | `GET` | `/api/admin/shops` | 管理员 | Admin |
@@ -97,13 +101,25 @@
 | `GET` | `/api/reviews/mine` | 登录用户 | Review |
 | `GET` | `/api/reviews/order/{orderId}` | 登录用户 | Review |
 | `POST` | `/api/rider/apply` | 骑手 | Delivery |
+| `GET` | `/api/rider/dispatched` | 骑手 | Delivery |
+| `POST` | `/api/rider/dispatched/{id}/accept` | 骑手 | Delivery |
+| `POST` | `/api/rider/dispatched/{id}/reject` | 骑手 | Delivery |
+| `GET` | `/api/rider/incidents` | 骑手 | Delivery |
 | `POST` | `/api/rider/location` | 骑手 | Delivery |
 | `GET` | `/api/rider/orders` | 骑手 | Delivery |
 | `POST` | `/api/rider/orders/{id}/deliver` | 骑手 | Delivery |
 | `POST` | `/api/rider/orders/{id}/grab` | 骑手 | Delivery |
+| `POST` | `/api/rider/orders/{id}/incident` | 骑手 | Delivery |
 | `POST` | `/api/rider/orders/{id}/pickup` | 骑手 | Delivery |
+| `GET` | `/api/rider/penalties` | 骑手 | RiderFinance |
 | `GET` | `/api/rider/pool` | 骑手 | Delivery |
 | `GET` | `/api/rider/profile` | 骑手 | Delivery |
+| `GET` | `/api/rider/settlements` | 骑手 | RiderFinance |
+| `GET` | `/api/rider/status` | 骑手 | Delivery |
+| `GET` | `/api/rider/summary` | 骑手 | RiderFinance |
+| `GET` | `/api/rider/wallet` | 骑手 | RiderFinance |
+| `GET` | `/api/rider/withdrawals` | 骑手 | RiderFinance |
+| `POST` | `/api/rider/withdrawals` | 骑手 | RiderFinance |
 | `GET` | `/api/shops` | 公开 | Shop |
 | `GET` | `/api/shops/{id}` | 公开 | Shop |
 | `GET` | `/api/shops/{id}/products` | 公开 | Shop |

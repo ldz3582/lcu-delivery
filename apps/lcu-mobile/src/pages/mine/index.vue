@@ -45,6 +45,13 @@
         </view>
         <text class="arrow">›</text>
       </view>
+      <view v-if="role === 'RIDER'" class="item" @click="go('/pages/rider/apply')">
+        <view>
+          <view>骑手入驻状态</view>
+          <view class="muted">{{ riderStatusText }}</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
       <view v-if="role === 'MERCHANT'" class="item" @click="go('/pages/merchant/finance')">
         <view>
           <view>资金与提现</view>
@@ -102,12 +109,13 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import { ROLE_LABEL, currentRole, currentUser, guard, logout, switchTo, type Role } from '../../utils/auth'
-import { api, identityApi, merchantApi } from '../../api'
+import { api, identityApi, merchantApi, riderApi } from '../../api'
 import { hasConfiguredTemplate, requestSubscribe } from '../../utils/subscribe'
 
 const role = ref<Role>(currentRole() || 'USER')
 const nickname = ref('')
 const merchantStatusText = ref('查看入驻资料与审核进度')
+const riderStatusText = ref('查看骑手入驻资料与审核进度')
 const identity = ref<{ required: boolean; verified: boolean; stuNoMask?: string | null }>({ required: false, verified: false })
 
 const roleLabel = computed(() => ROLE_LABEL[role.value] || '用户')
@@ -131,6 +139,15 @@ async function loadAccount() {
   } else if (role.value === 'RIDER') {
     const u = currentUser()
     accountName.value = u?.nickname ? '骑手 ' + u.nickname : ''
+    try {
+      const rst = await riderApi.status()
+      if (!rst?.applied) riderStatusText.value = '尚未提交入驻申请'
+      else if (rst.auditStatus === 0) riderStatusText.value = '审核中，请等待平台审核'
+      else if (rst.auditStatus === 2) riderStatusText.value = '已驳回：' + (rst.rejectReason || '请修改资料后重新提交')
+      else riderStatusText.value = '已通过，可开始抢单'
+    } catch (e) {
+      riderStatusText.value = '查看骑手入驻资料与审核进度'
+    }
   }
 }
 

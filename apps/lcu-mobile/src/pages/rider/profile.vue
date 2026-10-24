@@ -14,6 +14,16 @@
       <view class="stat"><view class="num">{{ profile?.workStatus === 1 ? '在线' : '离线' }}</view><view class="muted">接单状态</view></view>
     </view>
 
+    <view class="card entry" @click="goFinance">
+      <view class="between">
+        <view>
+          <view class="entry-title">我的收益 / 资金明细</view>
+          <view class="muted">钱包余额、佣金明细、提现与处罚记录</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
     <view class="card">
       <view class="muted">收益结算：订单完成即生成结算单，T+1 冻结期满自动入钱包（见后端 SettleJob）。</view>
     </view>
@@ -26,15 +36,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { riderApi } from '../../api'
+import { riderApi, ensureRiderApproved } from '../../api'
 import { guard, logout } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
 
 const profile = ref<any>(null)
 const auditText = computed(() => ['待审核', '已通过', '已驳回'][profile.value?.auditStatus ?? 0])
 
+function goFinance() {
+  uni.navigateTo({ url: '/pages/rider/finance' })
+}
+
 onShow(async () => {
   if (!guard('RIDER')) return
+  if (!(await ensureRiderApproved())) return
   try { profile.value = await riderApi.profile() } catch (e) { console.warn(e) }
 })
 </script>
@@ -51,4 +66,7 @@ onShow(async () => {
 .stat { flex: 1; background: #fff; border-radius: 20rpx; padding: 24rpx; text-align: center; }
 .num { font-size: 34rpx; font-weight: 700; color: #c2410c; }
 .btn.gray { margin-top: 30rpx; }
+.between { display: flex; align-items: center; justify-content: space-between; }
+.entry-title { font-size: 28rpx; font-weight: 600; color: #c2410c; }
+.arrow { color: #c3c7cc; }
 </style>

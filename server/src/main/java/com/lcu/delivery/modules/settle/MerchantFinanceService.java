@@ -244,8 +244,10 @@ public class MerchantFinanceService {
         String where = status == null ? "" : " WHERE w.status = " + status;
         long total = intOf("SELECT COUNT(*) FROM withdraw w" + where);
         List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT w.*, s.name AS shop_name FROM withdraw w "
-                        + "LEFT JOIN shop s ON w.owner_type = 2 AND s.id = w.owner_id"
+                "SELECT w.*, s.name AS shop_name, u.nickname AS rider_name FROM withdraw w "
+                        + "LEFT JOIN shop s ON w.owner_type = 2 AND s.id = w.owner_id "
+                        + "LEFT JOIN rider r ON w.owner_type = 3 AND r.id = w.owner_id "
+                        + "LEFT JOIN `user` u ON u.id = r.user_id"
                         + where + " ORDER BY w.id DESC LIMIT ? OFFSET ?",
                 Math.min(size, 50), Math.max(0, (page - 1) * size));
         List<Map<String, Object>> out = new ArrayList<>();
@@ -256,6 +258,7 @@ public class MerchantFinanceService {
             m.put("ownerType", r.get("owner_type"));
             m.put("ownerId", r.get("owner_id"));
             m.put("shopName", r.get("shop_name"));
+            m.put("riderName", r.get("rider_name"));
             m.put("amount", r.get("amount"));
             m.put("status", st);
             m.put("statusText", switch (st) {

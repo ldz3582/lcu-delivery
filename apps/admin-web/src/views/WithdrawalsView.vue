@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { auditWithdrawal, getWithdrawals, type Withdrawal } from '@/api'
@@ -27,6 +27,30 @@ const STATUS_TYPE: Record<number, TagType> = {
 }
 
 const query = reactive({ status: '' as number | '' })
+
+/** 提现对象类型：后端分页，这里只对当前页做前端筛选 */
+const OWNER_TYPES = [
+  { value: '', label: '全部对象' },
+  { value: 2, label: '商家' },
+  { value: 3, label: '骑手' },
+]
+
+const ownerType = ref<number | ''>('')
+
+const displayList = computed(() =>
+  list.value.filter((row) => ownerType.value === '' || row.ownerType === ownerType.value),
+)
+
+function ownerLabel(row: Withdrawal): string {
+  if (row.ownerType === 3) {
+    return row.riderName || `骑手#${row.ownerId}`
+  }
+  return row.shopName || `商家#${row.ownerId}`
+}
+
+function ownerTypeText(row: Withdrawal): string {
+  return row.ownerType === 3 ? '骑手' : '商家'
+}
 
 function statusType(status: number | null | undefined): TagType {
   return STATUS_TYPE[Number(status)] ?? 'info'
@@ -160,14 +184,28 @@ onMounted(load)
             {{ tab.label }}
           </el-radio-button>
         </el-radio-group>
-        <span class="muted">共 {{ total }} 条</span>
+        <el-select v-model="ownerType" placeholder="全部对象" style="width: 130px">
+          <el-option
+            v-for="opt in OWNER_TYPES"
+            :key="String(opt.value)"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
+        <span class="muted">
+          共 {{ total }} 条
+          <template v-if="ownerType !== ''">（当前页显示 {{ displayList.length }} 条）</template>
+        </span>
       </div>
 
-      <el-table v-loading="loading" :data="list" border stripe>
+      <el-table v-loading="loading" :data="displayList" border stripe>
         <el-table-column prop="id" label="单号" width="80" />
-        <el-table-column label="商家" min-width="140" show-overflow-tooltip>
+        <el-table-column label="提现对象" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.shopName || `#${row.ownerId}` }}
+            <span>{{ ownerLabel(row) }}</span>
+            <el-tag size="small" type="info" effect="plain" class="owner-tag">
+              {{ ownerTypeText(row) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="提现金额" width="115" align="right">
@@ -276,5 +314,9 @@ onMounted(load)
 
 .fail-reason {
   color: #f56c6c;
+}
+
+.owner-tag {
+  margin-left: 6px;
 }
 </style>

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lcu.delivery.common.BizException;
 import com.lcu.delivery.common.ErrorCode;
 import com.lcu.delivery.common.PageResult;
+import com.lcu.delivery.modules.delivery.DispatchService;
 import com.lcu.delivery.modules.order.OrderService;
 import com.lcu.delivery.modules.order.OrderStatus;
 import com.lcu.delivery.modules.order.entity.Order;
@@ -37,9 +38,12 @@ public class MerchantService {
     private final OrderMapper orderMapper;
     private final OrderService orderService;
     private final UserService userService;
+    private final DispatchService dispatchService;
 
     public MerchantService(ShopMapper shopMapper, ProductMapper productMapper, ProductSkuMapper skuMapper,
-                           OrderMapper orderMapper, OrderService orderService, UserService userService) {
+                           OrderMapper orderMapper, OrderService orderService, UserService userService,
+                           DispatchService dispatchService) {
+        this.dispatchService = dispatchService;
         this.skuMapper = skuMapper;
         this.shopMapper = shopMapper;
         this.productMapper = productMapper;
@@ -379,6 +383,12 @@ public class MerchantService {
 
     public void ready(Long userId, Long orderId) {
         orderService.merchantReady(orderId, requireShop(userId).getId());
+        // 高峰时段优先智能派单；没派出去就留在抢单大厅（闲时自由抢单）
+        try {
+            dispatchService.dispatch(orderService.require(orderId));
+        } catch (Exception ignore) {
+            // 派单失败不影响出餐
+        }
     }
 
     public List<Product> products(Long userId, boolean includeOffline) {

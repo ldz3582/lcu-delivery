@@ -13,6 +13,8 @@ import com.lcu.delivery.modules.order.entity.Order;
 import com.lcu.delivery.modules.order.mapper.OrderMapper;
 import com.lcu.delivery.modules.review.entity.Review;
 import com.lcu.delivery.modules.review.mapper.ReviewMapper;
+import com.lcu.delivery.modules.admin.SysConfigService;
+import com.lcu.delivery.modules.settle.RiderFinanceService;
 import com.lcu.delivery.modules.shop.entity.Shop;
 import com.lcu.delivery.modules.shop.mapper.ShopMapper;
 import com.lcu.delivery.modules.user.entity.User;
@@ -39,16 +41,21 @@ public class ReviewService {
     private final UserMapper userMapper;
     private final OrderMapper orderMapper;
     private final JdbcTemplate jdbc;
+    private final RiderFinanceService riderFinance;
+    private final SysConfigService config;
     private final ObjectMapper json = new ObjectMapper();
 
     public ReviewService(ReviewMapper reviewMapper, OrderService orderService, ShopMapper shopMapper,
-                         UserMapper userMapper, OrderMapper orderMapper, JdbcTemplate jdbc) {
+                         UserMapper userMapper, OrderMapper orderMapper, JdbcTemplate jdbc,
+                         RiderFinanceService riderFinance, SysConfigService config) {
         this.reviewMapper = reviewMapper;
         this.orderService = orderService;
         this.shopMapper = shopMapper;
         this.userMapper = userMapper;
         this.orderMapper = orderMapper;
         this.jdbc = jdbc;
+        this.riderFinance = riderFinance;
+        this.config = config;
     }
 
     public record CreateReq(Long orderId, Integer shopScore, Integer riderScore,
@@ -88,6 +95,12 @@ public class ReviewService {
         refreshShopScore(order.getShopId());
         if (order.getRiderId() != null) {
             refreshRiderScore(order.getRiderId());
+            // 差评扣罚：骑手评分 ≤2 星自动开罚单
+            if (r.getRiderScore() != null && r.getRiderScore() <= 2) {
+                int amount = config.getInt("delivery.bad_review_penalty", 300);
+                riderFinance.addPenalty(order.getRiderId(), order.getId(), 2, amount,
+                        "差评处罚（" + r.getRiderScore() + " 星）");
+            }
         }
         return r.getId();
     }

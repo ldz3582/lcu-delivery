@@ -27,6 +27,12 @@ INSERT INTO `sys_config` (`config_key`,`config_value`,`value_type`,`group_key`,`
   ('delivery.peak_bonus','50','int','delivery','午晚高峰加价（分/单）','2026-10-23 00:00:00'),
   ('delivery.max_concurrent','3','int','delivery','骑手最大同时接单数','2026-10-23 00:00:00'),
   ('delivery.eta_minutes','25','int','delivery','默认预计送达时长（分钟，无骑手定位时用）','2026-10-23 00:00:00'),
+  ('delivery.dispatch_enabled','false','bool','delivery','智能派单开关（关闭则只走抢单大厅）','2026-10-23 00:00:00'),
+  ('delivery.dispatch_peak_windows','11:00-13:00,17:00-19:00','string','delivery','派单高峰时段，逗号分隔','2026-10-23 00:00:00'),
+  ('delivery.dispatch_timeout_seconds','120','int','delivery','派单确认超时（秒），超时退回抢单池','2026-10-23 00:00:00'),
+  ('delivery.timeout_minutes','45','int','delivery','出餐到送达的超时判定（分钟），超时自动扣罚','2026-10-23 00:00:00'),
+  ('delivery.timeout_penalty','200','int','delivery','超时扣罚金额（分）','2026-10-23 00:00:00'),
+  ('delivery.bad_review_penalty','300','int','delivery','差评（≤2星）扣罚金额（分）','2026-10-23 00:00:00'),
   ('wx.template.order_status','','string','notify','订单状态订阅消息模板 ID（公众平台-订阅消息里复制）','2026-10-23 00:00:00'),
   ('wx.template.coupon','','string','notify','优惠券订阅消息模板 ID','2026-10-23 00:00:00'),
   ('delivery.fence_enforce','true','bool','delivery','提交订单是否强制校验围栏','2026-10-23 00:00:00')

@@ -11,6 +11,7 @@ PY="${PY:-python3}"
 jq_get() { "$PY" -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1"; }
 post() { curl -s -X POST "$BASE$1" -H 'Content-Type: application/json' ${2:+-H "Authorization: Bearer $2"} -d "$3"; }
 get() { curl -s "$BASE$1" -H "Authorization: Bearer $2"; }
+put() { curl -s -X PUT "$BASE$1" -H 'Content-Type: application/json' ${2:+-H "Authorization: Bearer $2"} -d "$3"; }
 
 step() { printf '\n\033[1;36m▶ %s\033[0m\n' "$1"; }
 ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
@@ -176,5 +177,43 @@ get /api/merchant/wallet "$M_TOKEN2" | "$PY" -c "import sys,json;d=json.load(sys
 get /api/merchant/summary "$M_TOKEN2" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];t=d['today'];print('  今日: 订单',t['orderCount'],'GMV',t['gmv'],'佣金',t['commission'],'实收',t['income'])"
 get "/api/merchant/statements?page=1&size=5" "$M_TOKEN2" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  对账单:',d['page']['total'],'条 | 待结算',d['summary']['pendingIncome'],'分')"
 get /api/merchant/withdrawals "$M_TOKEN2" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  提现记录:',len(d),'条',[(x['amount'],x['statusText']) for x in d[:3]])"
+
+
+step "24. 骑手入驻与准入（批次A）"
+R_STATUS=$(curl -s "$BASE/api/rider/status" -H "Authorization: Bearer $R_TOKEN")
+RID=$(echo "$R_STATUS" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print(d.get('riderId',''))")
+echo "$R_STATUS" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  入驻:',d.get('auditText'),'| 证件照片:',bool(d.get('idCardFront')),'| 保单:',d.get('insuranceNo') or '-')"
+
+step "25. 骑手作业：拍照取送 + 异常上报 + 轨迹（批次B）"
+# 新建一单并推到待取餐
+O2=$(post /api/orders "$USER_TOKEN" '{"shopId":1,"addressId":1,"items":[{"productId":2,"qty":1}]}' | jq_get "['data']['orderId']")
+post /api/pay/prepay "$USER_TOKEN" "{\"orderId\":$O2}" >/dev/null
+post /api/pay/mock-pay "$USER_TOKEN" "{\"orderId\":$O2}" >/dev/null
+post "/api/merchant/orders/$O2/accept" "$M_TOKEN" '{}' >/dev/null
+post "/api/merchant/orders/$O2/ready" "$M_TOKEN" '{}' >/dev/null
+post "/api/rider/orders/$O2/grab" "$R_TOKEN" '{}' >/dev/null
+post "/api/rider/orders/$O2/pickup" "$R_TOKEN" '{}' | "$PY" -c "import sys,json;d=json.load(sys.stdin);print('  无照片取餐:',d['code'],d['msg'])"
+post "/api/rider/orders/$O2/pickup" "$R_TOKEN" '{"photo":"https://example.com/p.jpg"}' >/dev/null
+post "/api/rider/orders/$O2/incident" "$R_TOKEN" '{"type":1,"remark":"冒烟：联系不上用户"}' | "$PY" -c "import sys,json;print('  异常上报:',json.load(sys.stdin)['code'])"
+get "/api/rider/incidents" "$R_TOKEN" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  异常记录:',len(d),'条',[(x['typeText'],x['statusText']) for x in d[:2]])"
+post /api/rider/location "$R_TOKEN" '{"lng":116.006,"lat":36.4315,"accuracy":15}' >/dev/null; ok "轨迹上报成功"
+post "/api/rider/orders/$O2/deliver" "$R_TOKEN" '{"photo":"https://example.com/d.jpg"}' >/dev/null; ok "送达（带照片）"
+
+step "26. 骑手资金：钱包 / 佣金明细 / 提现 / 处罚（批次C）"
+get /api/rider/wallet "$R_TOKEN" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  余额',d['balance'],'冻结',d['frozen'],'累计',d['totalIncome'],'罚金',d['totalPenalty'],'单量',d['totalOrders'])"
+get "/api/rider/settlements?page=1&size=5" "$R_TOKEN" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  佣金明细:',d['total'],'单 | 本页',d['summary']['pageIncome'],'分')"
+get /api/rider/penalties "$R_TOKEN" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  处罚记录:',len(d),'条',[(x['typeText'],x['amount']) for x in d[:2]])"
+
+step "27. 智能派单（批次D）"
+if [ -n "$A_TOKEN" ]; then
+  put /api/admin/configs "$A_TOKEN" '{"key":"delivery.dispatch_enabled","value":"true"}' >/dev/null 2>&1 || true
+fi
+O3=$(post /api/orders "$USER_TOKEN" '{"shopId":1,"addressId":1,"items":[{"productId":2,"qty":1}]}' | jq_get "['data']['orderId']")
+post /api/pay/prepay "$USER_TOKEN" "{\"orderId\":$O3}" >/dev/null
+post /api/pay/mock-pay "$USER_TOKEN" "{\"orderId\":$O3}" >/dev/null
+post "/api/merchant/orders/$O3/accept" "$M_TOKEN" '{}' >/dev/null
+post "/api/merchant/orders/$O3/ready" "$M_TOKEN" '{}' >/dev/null
+DISPATCHED=$(get /api/rider/dispatched "$R_TOKEN")
+echo "$DISPATCHED" | "$PY" -c "import sys,json;d=json.load(sys.stdin)['data'];print('  派给我的单:',len(d),'条',[(x['orderId'],x['shopName']) for x in d[:2]])"
 
 printf '\n\033[1;32m全部通过 ✅\033[0m\n'

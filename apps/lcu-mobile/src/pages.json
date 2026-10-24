@@ -25,6 +25,8 @@
     { "path": "pages/merchant/products", "style": { "navigationBarTitleText": "菜品管理" } },
     { "path": "pages/merchant/shop", "style": { "navigationBarTitleText": "店铺设置" } },
 
+    { "path": "pages/rider/apply", "style": { "navigationBarTitleText": "骑手入驻" } },
+    { "path": "pages/rider/finance", "style": { "navigationBarTitleText": "我的收益" } },
     { "path": "pages/rider/pool", "style": { "navigationBarTitleText": "抢单大厅", "enablePullDownRefresh": true } },
     { "path": "pages/rider/orders", "style": { "navigationBarTitleText": "我的配送", "enablePullDownRefresh": true } },
     { "path": "pages/rider/profile", "style": { "navigationBarTitleText": "骑手中心" } },
