@@ -27,7 +27,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { riderApi } from '../../api'
-import { logout } from '../../utils/auth'
+import { guard, logout } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
 
 const profile = ref<any>(null)

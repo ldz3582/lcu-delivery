@@ -47,9 +47,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onShow, onHide } from '@dcloudio/uni-app'
-import { merchantApi, type MerchantOrder, type MerchantShop } from '../../api'
-import { logout } from '../../utils/auth'
+import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
+import { merchantApi, ensureMerchantApproved, type MerchantOrder, type MerchantShop } from '../../api'
+import { guard, logout } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
 
 const tabs = [
@@ -98,12 +98,21 @@ async function toggleBiz() {
   load()
 }
 
-onShow(() => {
+onShow(async () => {
   if (!guard('MERCHANT')) return
+  // 没入驻/未通过审核：先去入驻页，避免 /api/merchant/shop 404 弹「还没有店铺」
+  if (!(await ensureMerchantApproved())) return
   load()
+  if (timer) clearInterval(timer)
   timer = setInterval(load, 10000)
 })
 onHide(() => { if (timer) clearInterval(timer) })
+onUnload(() => { if (timer) clearInterval(timer) })
+
+onPullDownRefresh(async () => {
+  if (await ensureMerchantApproved()) await load()
+  uni.stopPullDownRefresh()
+})
 </script>
 
 <style scoped>

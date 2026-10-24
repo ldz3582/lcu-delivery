@@ -10,10 +10,13 @@ import com.lcu.delivery.config.WechatProperties;
 import com.lcu.delivery.modules.user.IdentityService;
 import com.lcu.delivery.modules.user.entity.User;
 import com.lcu.delivery.modules.user.mapper.UserMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -25,20 +28,48 @@ public class AuthService {
     private final IdentityService identityService;
     private final JwtService jwtService;
     private final WechatClient wechatClient;
+    private final JdbcTemplate jdbc;
     private final AppProperties app;
     private final WechatProperties wechat;
 
     public AuthService(UserMapper userMapper, IdentityService identityService, JwtService jwtService,
-                       WechatClient wechatClient, AppProperties app, WechatProperties wechat) {
+                       WechatClient wechatClient, AppProperties app, WechatProperties wechat,
+                        JdbcTemplate jdbc) {
         this.userMapper = userMapper;
         this.identityService = identityService;
         this.jwtService = jwtService;
         this.wechatClient = wechatClient;
         this.app = app;
         this.wechat = wechat;
+        this.jdbc = jdbc;
     }
 
     public record LoginResp(String token, Long userId, String role, String nickname, String avatar) {
+    }
+
+    /**
+     * 演示账号列表：本地没有 AppID 时，商家/骑手端要能选「登哪家店 / 哪个骑手」。
+     * 只在 app.mock-login=true 时有数据，真实环境返回空数组，前端自动退回单账号入口。
+     */
+    public List<Map<String, Object>> mockAccounts(String role) {
+        if (!app.mockLogin()) {
+            return List.of();
+        }
+        String r = role == null ? "MERCHANT" : role.trim().toUpperCase();
+        if ("MERCHANT".equals(r)) {
+            return jdbc.queryForList(
+                    "SELECT u.openid AS openid, u.nickname AS nickname, s.id AS shopId, s.name AS shopName, "
+                            + "s.campus AS campus, s.audit_status AS auditStatus, s.biz_status AS bizStatus "
+                            + "FROM shop s JOIN `user` u ON u.id = s.owner_user_id "
+                            + "WHERE s.deleted_at IS NULL ORDER BY s.id");
+        }
+        if ("RIDER".equals(r)) {
+            return jdbc.queryForList(
+                    "SELECT u.openid AS openid, u.nickname AS nickname, r.id AS riderId, u.nickname AS riderName, "
+                            + "r.audit_status AS auditStatus, r.score AS score "
+                            + "FROM rider r JOIN `user` u ON u.id = r.user_id ORDER BY r.id");
+        }
+        return List.of();
     }
 
     @Transactional

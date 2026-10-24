@@ -56,6 +56,16 @@ CREATE TABLE IF NOT EXISTS `user_address` (
   KEY `idx_geo` (`lng`,`lat`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收货地址';
 
+CREATE TABLE IF NOT EXISTS `favorite` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`    BIGINT UNSIGNED NOT NULL,
+  `shop_id`    BIGINT UNSIGNED NOT NULL,
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_shop` (`user_id`,`shop_id`),
+  KEY `idx_shop` (`shop_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏店铺';
+
 -- ---------- 3. 店铺 ----------
 CREATE TABLE IF NOT EXISTS `shop` (
   `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -79,6 +89,8 @@ CREATE TABLE IF NOT EXISTS `shop` (
   `audit_status`  TINYINT NOT NULL DEFAULT 0 COMMENT '0待审 1通过 2驳回 3冻结',
   `license_url`   VARCHAR(512) DEFAULT NULL,
   `permit_url`    VARCHAR(512) DEFAULT NULL COMMENT '食品经营许可证',
+  `photos`        TEXT DEFAULT NULL COMMENT '门店照片 JSON 数组',
+  `reject_reason` VARCHAR(255) DEFAULT NULL COMMENT '审核驳回原因',
   `settle_status` TINYINT NOT NULL DEFAULT 0 COMMENT '0未签约 1已签约',
   `created_at`    DATETIME NOT NULL,
   `updated_at`    DATETIME NOT NULL,
@@ -120,6 +132,7 @@ CREATE TABLE IF NOT EXISTS `product` (
   `stock`       INT NOT NULL DEFAULT 0 COMMENT '-1 表示不限库存',
   `sales`       INT NOT NULL DEFAULT 0,
   `has_sku`     TINYINT NOT NULL DEFAULT 0,
+  `combo_items` TEXT DEFAULT NULL COMMENT '套餐组成 JSON [{productId,name,qty}]',
   `status`      TINYINT NOT NULL DEFAULT 1 COMMENT '1上架 0下架',
   `sort`        INT NOT NULL DEFAULT 0,
   `created_at`  DATETIME NOT NULL,

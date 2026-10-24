@@ -8,7 +8,9 @@ import com.lcu.delivery.common.ErrorCode;
 import com.lcu.delivery.common.PageResult;
 import com.lcu.delivery.modules.shop.entity.Product;
 import com.lcu.delivery.modules.shop.entity.Shop;
+import com.lcu.delivery.modules.shop.entity.ProductSku;
 import com.lcu.delivery.modules.shop.mapper.ProductMapper;
+import com.lcu.delivery.modules.shop.mapper.ProductSkuMapper;
 import com.lcu.delivery.modules.shop.mapper.ShopMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -25,11 +27,14 @@ public class ShopService {
 
     private final ShopMapper shopMapper;
     private final ProductMapper productMapper;
+    private final ProductSkuMapper skuMapper;
     private final JdbcTemplate jdbc;
 
-    public ShopService(ShopMapper shopMapper, ProductMapper productMapper, JdbcTemplate jdbc) {
+    public ShopService(ShopMapper shopMapper, ProductMapper productMapper,
+                       ProductSkuMapper skuMapper, JdbcTemplate jdbc) {
         this.shopMapper = shopMapper;
         this.productMapper = productMapper;
+        this.skuMapper = skuMapper;
         this.jdbc = jdbc;
     }
 
@@ -39,16 +44,46 @@ public class ShopService {
 
     public PageResult<Map<String, Object>> list(Integer campus, Long categoryId, String keyword,
                                                 BigDecimal lng, BigDecimal lat, int page, int size) {
+        String kw = keyword == null ? null : keyword.trim();
+        boolean hasKw = kw != null && !kw.isEmpty();
+
+        // 「搜菜品」：先按菜名命中商品，反查店铺；店铺卡片上带出命中的菜名，用户才知道为什么这家店出现
+        Map<Long, List<String>> matchedByShop = new LinkedHashMap<>();
+        if (hasKw) {
+            List<Product> hits = productMapper.selectList(Wrappers.<Product>lambdaQuery()
+                    .eq(Product::getStatus, 1)
+                    .isNull(Product::getDeletedAt)
+                    .like(Product::getName, kw)
+                    .last("limit 500"));
+            for (Product prod : hits) {
+                List<String> names = matchedByShop.computeIfAbsent(prod.getShopId(), k -> new ArrayList<>());
+                if (names.size() < 5) {
+                    names.add(prod.getName());
+                }
+            }
+        }
+
         LambdaQueryWrapper<Shop> qw = Wrappers.<Shop>lambdaQuery()
                 .eq(Shop::getAuditStatus, 1)
                 .isNull(Shop::getDeletedAt)
                 .eq(campus != null, Shop::getCampus, campus)
-                .eq(categoryId != null, Shop::getCategoryId, categoryId)
-                .like(keyword != null && !keyword.isBlank(), Shop::getName, keyword);
+                .eq(categoryId != null, Shop::getCategoryId, categoryId);
+        if (hasKw) {
+            qw.and(w -> {
+                w.like(Shop::getName, kw);
+                if (!matchedByShop.isEmpty()) {
+                    w.or().in(Shop::getId, matchedByShop.keySet());
+                }
+            });
+        }
         Page<Shop> p = shopMapper.selectPage(new Page<>(page, Math.min(size, 50)), qw);
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Shop s : p.getRecords()) {
             Map<String, Object> m = toCard(s);
+            List<String> matched = matchedByShop.get(s.getId());
+            if (matched != null && !matched.isEmpty()) {
+                m.put("matchedProducts", matched);
+            }
             if (lng != null && lat != null) {
                 m.put("distance", Math.round(distance(lng.doubleValue(), lat.doubleValue(),
                         s.getLng().doubleValue(), s.getLat().doubleValue()) * 10) / 10.0);
@@ -101,9 +136,34 @@ public class ShopService {
             m.put("originPrice", p.getOriginPrice());
             m.put("stock", p.getStock());
             m.put("sales", p.getSales());
+            m.put("hasSku", p.getHasSku());
+            m.put("comboItems", parseCombo(p.getComboItems()));
+            if (p.getHasSku() != null && p.getHasSku() == 1) {
+                List<ProductSku> skus = skuMapper.selectList(Wrappers.<ProductSku>lambdaQuery()
+                        .eq(ProductSku::getProductId, p.getId())
+                        .eq(ProductSku::getStatus, 1)
+                        .orderByAsc(ProductSku::getId));
+                m.put("skus", skus);
+                // 展示价取最低规格价（读取时算，不在库里改，删规格自然回落）
+                skus.stream().mapToInt(sk -> sk.getPrice() == null ? 0 : sk.getPrice())
+                        .filter(v -> v > 0).min().ifPresent(v -> m.put("price", v));
+            }
             rows.add(m);
         }
         return rows;
+    }
+
+    private List<Map<String, Object>> parseCombo(String combo) {
+        if (combo == null || combo.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(combo, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {
+                    });
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
     }
 
     private Map<String, Object> toCard(Shop s) {

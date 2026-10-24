@@ -149,3 +149,35 @@ INSERT INTO `product` (`id`,`shop_id`,`category_id`,`name`,`image`,`description`
   (150,11,111,'冰镇啤酒','','',600,700,-1,401,0,1,50,NOW(),NOW())
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`),`price`=VALUES(`price`);
 
+
+-- ---------- 优惠券（演示数据，时间窗口相对 NOW 计算，任何时候导都能用） ----------
+INSERT INTO `coupon` (`id`,`name`,`type`,`threshold`,`amount`,`total`,`remain`,`scope`,`shop_id`,`start_at`,`end_at`,`status`,`created_at`) VALUES
+  (1,'新人券·满20减5',1,2000,500,1000,1000,1,NULL,DATE_SUB(NOW(), INTERVAL 1 DAY),DATE_ADD(NOW(), INTERVAL 30 DAY),1,NOW()),
+  (2,'午餐满30减8',1,3000,800,500,500,1,NULL,DATE_SUB(NOW(), INTERVAL 1 DAY),DATE_ADD(NOW(), INTERVAL 30 DAY),1,NOW()),
+  (3,'全场9折券',2,1500,900,300,300,1,NULL,DATE_SUB(NOW(), INTERVAL 1 DAY),DATE_ADD(NOW(), INTERVAL 30 DAY),1,NOW()),
+  (4,'黄焖鸡专享·满25减6',1,2500,600,200,200,2,1,DATE_SUB(NOW(), INTERVAL 1 DAY),DATE_ADD(NOW(), INTERVAL 30 DAY),1,NOW())
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`),`threshold`=VALUES(`threshold`),`amount`=VALUES(`amount`),`remain`=VALUES(`remain`),`status`=VALUES(`status`);
+
+-- ---------- 演示商家归属修正（幂等） ----------
+-- 背景：`shop` 的 owner_user_id 是写死的 1/10..19，但开发过程中这些 user id 可能被
+-- `dev_xxx` 之类的测试账号占用，导致「登录商家端看到的不是这家店」。
+-- 这里按店铺 id 重新把 owner 绑到 mock_merchant / mock_merchant_N 上（按 openid 找，不依赖 id）。
+INSERT INTO `user` (`openid`,`nickname`,`role`,`status`,`created_at`,`updated_at`) VALUES
+  ('mock_merchant','一食堂·黄焖鸡','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_2','一食堂·兰州牛肉面','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_3','二食堂·麻辣香锅','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_4','学苑餐厅·台式盖浇饭','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_5','东门·老北京手抓饼','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_6','图书馆·咖啡轻食','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_7','鲜果时光·水果捞','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_8','校园超市·零食铺','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_9','西区食堂·砂锅米线','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_10','西区·麦香烘焙','MERCHANT',1,NOW(),NOW()),
+  ('mock_merchant_11','西区·夜宵烧烤','MERCHANT',1,NOW(),NOW())
+ON DUPLICATE KEY UPDATE `role` = 'MERCHANT', `nickname` = VALUES(`nickname`);
+
+UPDATE `shop` s
+  JOIN `user` u ON u.`openid` = CONCAT('mock_merchant', IF(s.`id` = 1, '', CONCAT('_', s.`id`)))
+SET s.`owner_user_id` = u.`id`
+WHERE s.`id` BETWEEN 1 AND 11;
+

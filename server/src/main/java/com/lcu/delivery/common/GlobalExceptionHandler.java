@@ -38,6 +38,14 @@ public class GlobalExceptionHandler {
         return Result.fail(ErrorCode.PARAM, "参数 " + e.getName() + " 格式不正确");
     }
 
+    /**
+     * 路径打错（含 /api/after-sales/ 这种空 id）应该回 404，别报成服务端 500。
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public Result<Void> handleNoResource(org.springframework.web.servlet.resource.NoResourceFoundException e) {
+        return Result.fail(ErrorCode.NOT_FOUND, "接口不存在：" + e.getResourcePath());
+    }
+
     @ExceptionHandler(Exception.class)
     public Result<Void> handleOther(Exception e) {
         log.error("未处理异常", e);

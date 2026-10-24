@@ -6,3 +6,5 @@ dist/
 server/certs/
 .DS_Store
 ops/data/
+uploads/
+ops/uploads/

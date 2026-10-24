@@ -39,7 +39,7 @@ public class PayController {
 
     @PostMapping("/refund")
     public Result<Void> refund(@RequestBody RefundReq req) {
-        payService.refund(req.orderId(), req.amount(), req.reason(), UserContext.userId());
+        payService.refundForUser(UserContext.userId(), req.orderId(), req.amount(), req.reason());
         return Result.ok();
     }
 }

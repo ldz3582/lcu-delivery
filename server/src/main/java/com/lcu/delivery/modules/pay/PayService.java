@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.lcu.delivery.common.BizException;
 import com.lcu.delivery.common.ErrorCode;
 import com.lcu.delivery.config.AppProperties;
+import com.lcu.delivery.modules.coupon.CouponService;
 import com.lcu.delivery.modules.order.OrderService;
 import com.lcu.delivery.modules.order.OrderStatus;
 import com.lcu.delivery.modules.order.entity.Order;
@@ -31,15 +32,17 @@ public class PayService {
     private final PayGateway gateway;
     private final AppProperties app;
     private final JdbcTemplate jdbc;
+    private final CouponService couponService;
 
     public PayService(PaymentMapper paymentMapper, OrderMapper orderMapper, OrderService orderService,
-                      PayGateway gateway, AppProperties app, JdbcTemplate jdbc) {
+                      PayGateway gateway, AppProperties app, JdbcTemplate jdbc, CouponService couponService) {
         this.paymentMapper = paymentMapper;
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.gateway = gateway;
         this.app = app;
         this.jdbc = jdbc;
+        this.couponService = couponService;
     }
 
     @Transactional
@@ -130,27 +133,76 @@ public class PayService {
         throw new BizException(ErrorCode.PAY_FAILED, "微信支付回调验签未实现，请接入 SDK 后启用");
     }
 
+    /**
+     * 用户自助退款：只能退自己的单，且只允许「已支付、未完成」阶段。
+     * 已完成订单必须走售后工单，由平台仲裁后再退。
+     */
     @Transactional
-    public void refund(Long orderId, Integer amount, String reason, Long operatorId) {
-        Order order = orderService.require(orderId);
+    public void refundForUser(Long userId, Long orderId, Integer amount, String reason) {
+        Order order = orderService.requireOwned(userId, orderId);
+        int status = order.getStatus();
+        boolean refundable = status == OrderStatus.WAIT_ACCEPT
+                || status == OrderStatus.COOKING
+                || status == OrderStatus.WAIT_PICKUP
+                || status == OrderStatus.DELIVERING
+                || status == OrderStatus.AFTER_SALE;
+        if (!refundable) {
+            throw new BizException(ErrorCode.ORDER_STATUS, "当前状态不可直接退款，已完成订单请提交售后申请");
+        }
+        refundInternal(order, amount, reason, 1, userId, true);
+    }
+
+    /** 平台仲裁 / 商家拒单等后台动作触发的退款。 */
+    @Transactional
+    public void refundByOperator(Long orderId, Integer amount, String reason, int operatorType, Long operatorId) {
+        refundInternal(orderService.require(orderId), amount, reason, operatorType, operatorId, true);
+    }
+
+    /** 部分退款（售后少餐/漏餐等）：只落退款流水，不改订单终态、不回滚库存、不返还券。 */
+    @Transactional
+    public void refundPartial(Long orderId, Integer amount, String reason, int operatorType, Long operatorId) {
+        refundInternal(orderService.require(orderId), amount, reason, operatorType, operatorId, false);
+    }
+
+    private void refundInternal(Order order, Integer amount, String reason, int operatorType, Long operatorId,
+                                boolean markRefunded) {
+        Long orderId = order.getId();
         Payment payment = paymentMapper.selectOne(Wrappers.<Payment>lambdaQuery()
                 .eq(Payment::getOrderId, orderId).eq(Payment::getStatus, 1).last("limit 1"));
         if (payment == null) {
             throw new BizException(ErrorCode.PAY_FAILED, "没有可退款的支付单");
         }
         int refundAmount = amount == null ? payment.getAmount() : amount;
+        if (refundAmount <= 0) {
+            throw new BizException(ErrorCode.PARAM, "退款金额必须大于 0");
+        }
         if (refundAmount > payment.getAmount()) {
             throw new BizException(ErrorCode.PAY_FAILED, "退款金额不能大于支付金额");
         }
-        String refundNo = "R" + order.getOrderNo();
+        Integer refunded = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(amount), 0) FROM refund WHERE order_id = ? AND status = 1",
+                Integer.class, orderId);
+        if (refunded != null && refunded + refundAmount > payment.getAmount()) {
+            throw new BizException(ErrorCode.PAY_FAILED, "累计退款不能超过支付金额（已退 "
+                    + String.format("%.2f", refunded / 100.0) + " 元）");
+        }
+        // 同一单可能多次部分退款（售后多次赔付），退单号必须唯一：
+        // R + 订单号 + "-" + 该单已退款笔数+1（refund_no 上限 32 字符）
+        Integer refundedTimes = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refund WHERE order_id = ?", Integer.class, orderId);
+        String refundNo = "R" + order.getOrderNo() + "-" + ((refundedTimes == null ? 0 : refundedTimes) + 1);
         jdbc.update("INSERT INTO refund (order_id, payment_id, refund_no, amount, reason, status, operator_type, operator_id, refunded_at, created_at) "
                         + "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 orderId, payment.getId(), refundNo, refundAmount, reason, gateway.mock() ? 1 : 0,
-                5, operatorId, gateway.mock() ? LocalDateTime.now() : null, LocalDateTime.now());
+                operatorType, operatorId, gateway.mock() ? LocalDateTime.now() : null, LocalDateTime.now());
 
+        if (!markRefunded) {
+            return;
+        }
         if (order.getStatus() != OrderStatus.CANCELED && order.getStatus() != OrderStatus.REFUNDED) {
             orderService.restoreStock(orderId);
         }
+        couponService.restoreByOrder(orderId);
         orderService.updateStatus(order, OrderStatus.REFUNDED, "退款：" + (reason == null ? "无" : reason));
     }
 

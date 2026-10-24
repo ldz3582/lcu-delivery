@@ -11,14 +11,14 @@ lcu-delivery/
 │   ├── lcu-mobile/         ★ 统一小程序：用户/商家/骑手/管理员 四端合一（19 个页面）
 │   ├── user-uniapp/        [已废弃] 原用户端，已并入 lcu-mobile
 │   ├── workbench-uniapp/   [已废弃] 原商家/骑手工作台，已并入 lcu-mobile
-│   └── admin-web/          管理后台（Vue3 + Element Plus，7 个页面）
+│   └── admin-web/          管理后台（Vue3 + Element Plus，11 个页面：+优惠券/售后仲裁/评价/消息日志）
 ├── ops/
 │   ├── docker-compose.yml  MySQL 8.4 + Redis 7.4 + MinIO
 │   ├── sql/                schema.sql（29 表）/ seed.sql（开关）/ demo.sql（演示数据）
 │   ├── dev.sh              一键启动
 │   └── smoke-test.sh       端到端冒烟测试
 └── docs/
-    ├── API.md              接口清单（50 个）
+    ├── API.md              接口清单（107 个，含评价/售后/券/订阅/收藏/商家资金/上传）
     ├── gen_api.py          从 Controller 注解生成接口文档
     └── gen_entities.py     从字段定义生成实体/Mapper
 ```
@@ -39,9 +39,62 @@ lcu-delivery/
 > 小程序端已彻底移除管理员身份与相关页面，只服务 用户 / 商家 / 骑手。
 > 用户登录后在后台「用户管理」页可见（昵称、openid、核验状态、下单数）。
 
+> **本地演示账号**：商家端登录页可以直接选店（一食堂·黄焖鸡 / 二食堂·麻辣香锅 / … 共 11 家），
+> 对应账号 `mock_merchant`、`mock_merchant_2` … `mock_merchant_11`；骑手端 `mock_rider`。
+> 已登录状态下也可以从「我的 → 切换店铺 / 切换骑手账号」重新选，不用退出登录。
+> 账号清单来自 `GET /api/auth/mock-accounts?role=MERCHANT`（只在 `app.mock-login=true` 时有数据）。
+
 > 微信原生 tabBar 的页面是编译期写死的，做不到四套导航，所以底部栏用
 > `components/AppTabBar.vue` + `uni.reLaunch` 自己实现；每个页面在 `onShow`
 > 里用 `guard(role)` 做身份守卫，越权会自动跳回自己的首页。
+
+
+## 用户端功能覆盖（对照需求清单）
+
+| 需求 | 状态 | 实现位置 |
+| --- | --- | --- |
+| 商家浏览 / 分类筛选（食堂·小吃·饮品·超市）/ 校区切换 | ✅ | `GET /api/shops`、`/api/categories` |
+| 菜品搜索（搜店名**或菜名**，卡片回显命中的菜） | ✅ | `ShopService.list`，命中菜名反查店铺并带 `matchedProducts` |
+| 收藏店铺 | ❌ 未做 | 无表无接口（二期） |
+| 购物车 / 下单 | ✅ | 本地 Pinia + `POST /api/cart/calculate` 服务端算价、库存原子扣减、围栏与起送拦截 |
+| 微信支付 | ⚠️ 仅模拟 | `WechatPayGateway` 是待接 SDK 的空壳；本地 `app.mock-pay=true` 走 mock |
+| 优惠券 / 满减 | ✅ | 领券中心、我的券、算价抵扣、下单核销、取消/退款自动返券；后台可发券上下架 |
+| 订单追踪（接单→出餐→取餐→送达） | ✅ | `GET /api/orders/{id}/track`：六节点时间轴 + 状态流水，前端 5 秒轮询 |
+| 查看骑手位置 | ✅ | 骑手上报 `rider_location`，用户端 track 返回最新坐标 + 地图/连线 + ETA |
+| 订单评价 | ✅ | 一单一评、店铺/骑手评分、商家回复、后台隐藏；写入后重算店铺与骑手均分 |
+| 售后申请（少餐/漏餐/变质/撒漏/地址错误/其他） | ✅ | 工单 + 责任方 + 图片；申请后订单进「售后中」 |
+| 退款 | ✅（模拟通道） | 用户自助退（未完成单）、商家同意退、平台仲裁部分/全额退，均落 `refund` 流水且累计不超实付 |
+| 消息订阅（订单状态 / 优惠券） | ⚠️ 代码就绪待模板 | `NotifyService` + `notify_log`；配好 `wx.template.*` 与 AppID/Secret 即真实下发，否则只记日志 |
+
+> 用户端 14 项：9 项完整、2 项「代码就绪但缺微信侧配置」（真实支付、订阅模板）、1 项未做（收藏店铺）、
+> 2 项为基础设施（购物车、下单）。三批联调脚本：`ops/smoke-test.sh`（18 步，含越权退款防护）。
+
+## 商家端功能覆盖（对照需求 2.2）
+
+| 需求 | 状态 | 实现位置 |
+| --- | --- | --- |
+| 入驻：营业执照 / 食品经营许可证 / 门店照片 + 平台审核 | ✅ | `POST /api/merchant/apply`、`GET /api/merchant/status`、`POST /api/admin/shops/{id}/audit`（驳回原因可回传，改资料可重提） |
+| 店铺信息管理 + 一键暂停营业 | ✅ | `PUT /api/merchant/shop`；关店后下单返回 `2003` |
+| 菜品：新增/上下架/价格/库存/图片/分类 | ✅ | `POST|PUT /api/merchant/products` + `POST /api/upload`（本地磁盘，接口与 OSS 一致） |
+| 菜品：规格 SKU | ✅ | `product_sku` 表 + `/api/merchant/products/{id}/skus`；下单按规格价与规格库存，取消自动回滚 |
+| 菜品：套餐 | ⚠️ 简化 | `product.combo_items`（JSON 组成）；只扣套餐自身库存，**不联动扣组成商品库存** |
+| 订单接收 / 接单 / 拒单 / 标记出餐 | ✅ | 10s 轮询 + 下拉刷新；未通过审核的商家会被准入守卫挡回入驻页 |
+| 小票打印 | ❌ 未做 | 需蓝牙小票机或云打印账号（易联云/飞鹅），属外部依赖，建议二期 |
+| 营销：满减 / 折扣 | ✅ | 商家自建店铺券 `/api/merchant/coupons`（`scope=2`，只对本店生效）；平台券仍在后台发 |
+| 营销：特价商品 | ✅ | `product.origin_price` 划线价 + 现价 |
+| 订单对账 / 营收统计 | ✅ | `/api/merchant/statements`（按日筛选 + 汇总）、`/api/merchant/summary`（今日/本周/本月 GMV、佣金、实收、客单价） |
+| 平台佣金自动扣除 | ✅ | 下单即算 `commission`，订单完成生成结算单，T+N 入钱包 |
+| 提现申请 / 记录 / 平台审核 | ✅ | `/api/merchant/withdrawals`（申请即冻结）、`/api/admin/withdrawals`（通过释放冻结 / 驳回退回余额） |
+
+> 商家端资金目前是**模拟打款**：审核通过只把冻结金额释放并置「已到账」，真实环境要接微信「商家转账到零钱」。
+
+## 订阅消息配置（不配也能跑，只是不发真消息）
+
+1. 公众平台 → 订阅消息 → 选「订单状态」「优惠券到账」类目模板，复制模板 ID
+2. 后台「配置」页填：`wx.template.order_status`、`wx.template.coupon`
+3. `ops/.env` 里填 `WX_USER_APPID` / `WX_USER_SECRET` 后重启
+4. 没配时：`GET /api/notify/templates` 返回 `configured=false`，小程序端静默跳过授权弹窗；
+   每次本该发送的消息都会在 `notify_log` 留一条 `status=2 + 原因`，后台「消息日志」页可查
 
 
 ## 接入真实微信小程序（拿 AppID 之后）

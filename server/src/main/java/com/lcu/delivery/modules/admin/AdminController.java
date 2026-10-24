@@ -85,6 +85,13 @@ public class AdminController {
         return Result.ok(adminService.settlements(page, size));
     }
 
+    /** 手动结算一单（演示/应急；正常 T+N 自动结算） */
+    @PostMapping("/settlements/{id}/settle")
+    public Result<Void> settleOne(@PathVariable Long id) {
+        adminService.settleOne(id);
+        return Result.ok();
+    }
+
     @GetMapping("/fence")
     public Result<List<Map<String, Object>>> fence() {
         return Result.ok(adminService.fences());

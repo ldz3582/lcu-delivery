@@ -28,7 +28,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, type OrderCard } from '../../api'
 import { guard } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
@@ -45,6 +45,20 @@ const tabs = [
 
 const active = ref<number | undefined>(undefined)
 const orders = ref<OrderCard[]>([])
+let timer: any = null
+
+/** 列表页也要自动同步：骑手一送达，这里不手动刷新也能看到「已完成」 */
+function startPoll() {
+  stopPoll()
+  timer = setInterval(load, 8000)
+}
+
+function stopPoll() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
 
 async function load() {
   const res = await api.orders(active.value)
@@ -63,6 +77,15 @@ function go(id: number) {
 onShow(async () => {
   if (!guard('USER')) return
   await load()
+  startPoll()
+})
+
+onHide(stopPoll)
+onUnload(stopPoll)
+
+onPullDownRefresh(async () => {
+  await load()
+  uni.stopPullDownRefresh()
 })
 </script>
 

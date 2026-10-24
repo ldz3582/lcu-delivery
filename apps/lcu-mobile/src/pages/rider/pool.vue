@@ -23,7 +23,10 @@
           <view class="btn small" @click="grab(o.orderId)">抢单</view>
         </view>
       </view>
-      <view v-if="!pool.length" class="empty">暂时没有可抢的订单</view>
+      <view v-if="!pool.length" class="empty">
+        <view>暂时没有可抢的订单</view>
+        <view class="empty-tip">商家点「出餐」后，订单才会进抢单大厅（每 8 秒自动刷新，也可下拉刷新）</view>
+      </view>
     </view>
 
     <view class="nav">
@@ -37,9 +40,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { riderApi, type RiderPoolItem } from '../../api'
-import { logout } from '../../utils/auth'
+import { guard, logout } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
 
 const pool = ref<RiderPoolItem[]>([])
@@ -62,6 +65,18 @@ async function load() {
   }
 }
 
+function startPolling() {
+  stopPolling()
+  timer = setInterval(load, 8000)
+}
+
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
 async function grab(id: number) {
   await riderApi.grab(id)
   uni.showToast({ title: '抢单成功' })
@@ -73,7 +88,15 @@ function go(url: string) { uni.navigateTo({ url }) }
 onShow(() => {
   if (!guard('RIDER')) return
   load()
-  timer = setInterval(load, 8000)
+  startPolling()
+})
+
+onHide(stopPolling)
+onUnload(stopPolling)
+
+onPullDownRefresh(async () => {
+  await load()
+  uni.stopPullDownRefresh()
 })
 </script>
 
@@ -86,7 +109,8 @@ onShow(() => {
 .income { color: #c2410c; font-weight: 600; }
 .mt8 { margin-top: 10rpx; }
 .btn.small { padding: 12rpx 34rpx; font-size: 26rpx; border-radius: 30rpx; }
-.empty { text-align: center; color: #9ca3af; padding: 100rpx 0; }
+.empty { text-align: center; color: #9ca3af; padding: 80rpx 40rpx; }
+.empty-tip { font-size: 24rpx; color: #c2c6cd; margin-top: 12rpx; line-height: 1.6; }
 .nav {
   position: fixed; bottom: 0; left: 0; right: 0; background: #fff;
   display: flex; justify-content: space-around; padding: 24rpx 0; border-top: 1rpx solid #eef0f3; font-size: 26rpx; color: #4b5563;

@@ -26,6 +26,9 @@ INSERT INTO `sys_config` (`config_key`,`config_value`,`value_type`,`group_key`,`
   ('delivery.rider_base_income','150','int','delivery','骑手基础佣金（分/单）','2026-10-23 00:00:00'),
   ('delivery.peak_bonus','50','int','delivery','午晚高峰加价（分/单）','2026-10-23 00:00:00'),
   ('delivery.max_concurrent','3','int','delivery','骑手最大同时接单数','2026-10-23 00:00:00'),
+  ('delivery.eta_minutes','25','int','delivery','默认预计送达时长（分钟，无骑手定位时用）','2026-10-23 00:00:00'),
+  ('wx.template.order_status','','string','notify','订单状态订阅消息模板 ID（公众平台-订阅消息里复制）','2026-10-23 00:00:00'),
+  ('wx.template.coupon','','string','notify','优惠券订阅消息模板 ID','2026-10-23 00:00:00'),
   ('delivery.fence_enforce','true','bool','delivery','提交订单是否强制校验围栏','2026-10-23 00:00:00')
 ON DUPLICATE KEY UPDATE `config_value` = VALUES(`config_value`);
 

@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { riderApi } from '../../api'
 import { guard } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
@@ -52,6 +52,11 @@ async function deliver(id: number) {
 }
 
 onShow(() => { if (!guard('RIDER')) return; load() })
+
+onPullDownRefresh(async () => {
+  await load()
+  uni.stopPullDownRefresh()
+})
 </script>
 
 <style scoped>

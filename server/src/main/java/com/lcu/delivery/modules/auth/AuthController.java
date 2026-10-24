@@ -3,10 +3,15 @@ package com.lcu.delivery.modules.auth;
 import com.lcu.delivery.common.Result;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -36,6 +41,12 @@ public class AuthController {
     @PostMapping("/stu-login")
     public Result<AuthService.LoginResp> stuLogin(@RequestBody StuLoginReq req) {
         return Result.ok(authService.stuLogin(req.stuNo()));
+    }
+
+    /** 演示账号（仅 mock 环境）：商家端可选具体哪家店、骑手端可选哪个骑手。 */
+    @GetMapping("/mock-accounts")
+    public Result<List<Map<String, Object>>> mockAccounts(@RequestParam(defaultValue = "MERCHANT") String role) {
+        return Result.ok(authService.mockAccounts(role));
     }
 
     @PostMapping("/mock-login")

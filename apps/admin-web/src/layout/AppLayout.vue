@@ -8,8 +8,13 @@ import {
   DataBoard,
   Document,
   Money,
+  CreditCard,
   Setting,
   Shop,
+  Ticket,
+  FirstAidKit,
+  ChatDotRound,
+  Message,
   SwitchButton,
 } from '@element-plus/icons-vue'
 import { NAME_KEY, ROLE_KEY, TOKEN_KEY } from '@/api/http'
@@ -29,6 +34,11 @@ const menus = [
   { path: '/riders', label: '骑手审核', icon: Bicycle },
   { path: '/orders', label: '订单', icon: Document },
   { path: '/settlements', label: '结算', icon: Money },
+  { path: '/withdrawals', label: '提现审核', icon: CreditCard },
+  { path: '/coupons', label: '优惠券', icon: Ticket },
+  { path: '/after-sales', label: '售后仲裁', icon: FirstAidKit },
+  { path: '/reviews', label: '评价管理', icon: ChatDotRound },
+  { path: '/notify-logs', label: '消息日志', icon: Message },
   { path: '/configs', label: '平台配置', icon: Setting },
 ]
 

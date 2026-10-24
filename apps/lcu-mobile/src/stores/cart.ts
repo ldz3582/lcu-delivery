@@ -6,6 +6,20 @@ export interface CartItem {
   price: number
   image?: string
   qty: number
+  /** 规格：同一商品的不同规格各占一行，只有 productId + skuId 都相同才合并数量 */
+  skuId?: number
+  skuName?: string
+}
+
+export interface CartSku {
+  id: number
+  name: string
+  price: number
+}
+
+/** 加购行的唯一键：有规格按规格区分 */
+function sameLine(i: CartItem, productId: number, skuId?: number) {
+  return i.productId === productId && (i.skuId || 0) === (skuId || 0)
 }
 
 export const useCartStore = defineStore('cart', {
@@ -19,25 +33,39 @@ export const useCartStore = defineStore('cart', {
     goodsAmount: (s) => s.items.reduce((n, i) => n + i.price * i.qty, 0)
   },
   actions: {
-    add(shopId: number, shopName: string, product: { id: number; name: string; price: number; image?: string }) {
+    /** 带规格加购用规格价展示；最终金额仍以后端 calculate 为准 */
+    add(
+      shopId: number,
+      shopName: string,
+      product: { id: number; name: string; price: number; image?: string },
+      sku?: CartSku
+    ) {
       if (this.shopId && this.shopId !== shopId) {
         this.items = []
       }
       this.shopId = shopId
       this.shopName = shopName
-      const hit = this.items.find((i) => i.productId === product.id)
+      const hit = this.items.find((i) => sameLine(i, product.id, sku?.id))
       if (hit) {
         hit.qty += 1
       } else {
-        this.items.push({ productId: product.id, name: product.name, price: product.price, image: product.image, qty: 1 })
+        this.items.push({
+          productId: product.id,
+          name: product.name,
+          price: sku ? sku.price : product.price,
+          image: product.image,
+          qty: 1,
+          skuId: sku?.id,
+          skuName: sku?.name
+        })
       }
     },
-    inc(productId: number) {
-      const hit = this.items.find((i) => i.productId === productId)
+    inc(productId: number, skuId?: number) {
+      const hit = this.items.find((i) => sameLine(i, productId, skuId))
       if (hit) hit.qty += 1
     },
-    dec(productId: number) {
-      const idx = this.items.findIndex((i) => i.productId === productId)
+    dec(productId: number, skuId?: number) {
+      const idx = this.items.findIndex((i) => sameLine(i, productId, skuId))
       if (idx >= 0) {
         this.items[idx].qty -= 1
         if (this.items[idx].qty <= 0) this.items.splice(idx, 1)

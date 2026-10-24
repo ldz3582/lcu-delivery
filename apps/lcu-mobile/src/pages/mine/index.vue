@@ -15,9 +15,46 @@
       <view class="item" @click="go('/pages/order/list')">
         <text>我的订单</text><text class="arrow">›</text>
       </view>
+      <view class="item" @click="go('/pages/coupon/index')">
+        <text>我的优惠券</text><text class="arrow">›</text>
+      </view>
+      <view class="item" @click="go('/pages/favorite/index')">
+        <text>我的收藏</text><text class="arrow">›</text>
+      </view>
+      <view class="item" @click="onNotify">
+        <view>
+          <view>消息通知</view>
+          <view class="muted">订单状态、优惠券提醒</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
     </view>
 
-    <view class="card">
+    <view v-if="role !== 'USER'" class="card menu">
+      <view class="item" @click="switchAccount">
+        <view>
+          <view>{{ role === 'MERCHANT' ? '切换店铺' : '切换骑手账号' }}</view>
+          <view class="muted">{{ accountName || '点击选择要进入的账号' }}</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+      <view v-if="role === 'MERCHANT'" class="item" @click="go('/pages/merchant/apply')">
+        <view>
+          <view>入驻状态</view>
+          <view class="muted">{{ merchantStatusText }}</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+      <view v-if="role === 'MERCHANT'" class="item" @click="go('/pages/merchant/finance')">
+        <view>
+          <view>资金与提现</view>
+          <view class="muted">余额、对账单、提现记录</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
+    <view v-if="role === 'USER'" class="card">
       <view class="sec-title">校内身份</view>
       <view class="row between ident">
         <view>
@@ -65,13 +102,42 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import { ROLE_LABEL, currentRole, currentUser, guard, logout, switchTo, type Role } from '../../utils/auth'
-import { api, identityApi } from '../../api'
+import { api, identityApi, merchantApi } from '../../api'
+import { hasConfiguredTemplate, requestSubscribe } from '../../utils/subscribe'
 
 const role = ref<Role>(currentRole() || 'USER')
 const nickname = ref('')
+const merchantStatusText = ref('查看入驻资料与审核进度')
 const identity = ref<{ required: boolean; verified: boolean; stuNoMask?: string | null }>({ required: false, verified: false })
 
 const roleLabel = computed(() => ROLE_LABEL[role.value] || '用户')
+const accountName = ref('')
+
+/** 商家显示当前店铺名，骑手显示昵称，方便确认「我现在是哪个账号」 */
+async function loadAccount() {
+  if (role.value === 'MERCHANT') {
+    // 用 status 接口：没店时返回 applied=false，不会再命中 /api/merchant/shop 的 404 提示
+    try {
+      const st = await merchantApi.status()
+      accountName.value = st?.applied ? (st.name || '') : ''
+      if (!st?.applied) merchantStatusText.value = '尚未入驻，点击提交资料'
+      else if (st.auditStatus === 0) merchantStatusText.value = '审核中，请等待平台审核'
+      else if (st.auditStatus === 2) merchantStatusText.value = '已驳回：' + (st.rejectReason || '请修改资料后重新提交')
+      else merchantStatusText.value = '已通过，可开始接单'
+    } catch {
+      accountName.value = ''
+      merchantStatusText.value = '查看入驻资料与审核进度'
+    }
+  } else if (role.value === 'RIDER') {
+    const u = currentUser()
+    accountName.value = u?.nickname ? '骑手 ' + u.nickname : ''
+  }
+}
+
+/** 换一家店 / 换一个骑手：回到登录页的账号选择 */
+function switchAccount() {
+  uni.reLaunch({ url: '/pages/login/index?role=' + role.value })
+}
 
 const roleList: { key: Role; label: string; icon: string }[] = [
   { key: 'USER', label: '用户', icon: '🍜' },
@@ -81,6 +147,25 @@ const roleList: { key: Role; label: string; icon: string }[] = [
 
 function go(url: string) {
   uni.navigateTo({ url })
+}
+
+/** 消息通知：后台没配模板时只提示，不弹授权框、不报错 */
+async function onNotify() {
+  try {
+    const configured = await hasConfiguredTemplate(['order_status', 'coupon'])
+    if (!configured) {
+      uni.showToast({ title: '后台未配置订阅模板，暂不可用', icon: 'none' })
+      return
+    }
+    const opened = await requestSubscribe(['order_status', 'coupon'])
+    if (!opened) {
+      uni.showToast({ title: '未开启，可在小程序设置中开启通知', icon: 'none' })
+    } else {
+      uni.showToast({ title: '已申请消息通知', icon: 'none' })
+    }
+  } catch (e) {
+    console.warn(e)
+  }
 }
 
 async function switchRole(r: Role) {
@@ -147,6 +232,7 @@ onShow(async () => {
   role.value = r
   const u = currentUser()
   nickname.value = u?.nickname || u?.realName || u?.username || ROLE_LABEL[r]
+  await loadAccount()
   await loadIdentity()
   if (r === 'USER') {
     try {

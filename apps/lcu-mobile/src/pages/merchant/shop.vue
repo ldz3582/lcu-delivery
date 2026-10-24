@@ -14,6 +14,24 @@
       <view class="field"><text>配送费（分）</text><input v-model="form.deliveryFee" type="number" /></view>
       <view class="btn" @click="save">保存设置</view>
     </view>
+
+    <view class="card">
+      <view class="entry-row" @click="goFinance">
+        <view>
+          <view class="entry-title">资金与对账</view>
+          <view class="muted mt8">可提现余额、营收统计、对账单与提现记录</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+      <view class="entry-row" @click="goCoupons">
+        <view>
+          <view class="entry-title">店铺优惠券</view>
+          <view class="muted mt8">创建满减/折扣券，仅本店可用</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
     <AppTabBar :role="'MERCHANT'" />
   </view>
 </template>
@@ -21,7 +39,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { merchantApi, type MerchantShop } from '../../api'
+import { merchantApi, ensureMerchantApproved, type MerchantShop } from '../../api'
 import { guard } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
 
@@ -44,6 +62,14 @@ async function toggle(e: any) {
   load()
 }
 
+function goFinance() {
+  uni.navigateTo({ url: '/pages/merchant/finance' })
+}
+
+function goCoupons() {
+  uni.navigateTo({ url: '/pages/merchant/coupons' })
+}
+
 async function save() {
   await merchantApi.updateShop({
     openTime: form.openTime,
@@ -55,7 +81,11 @@ async function save() {
   load()
 }
 
-onShow(() => { if (!guard('MERCHANT')) return; load() })
+onShow(async () => {
+  if (!guard('MERCHANT')) return
+  if (!(await ensureMerchantApproved())) return
+  load()
+})
 </script>
 
 <style scoped>
@@ -65,4 +95,11 @@ onShow(() => { if (!guard('MERCHANT')) return; load() })
 .field input { flex: 1; text-align: right; }
 .btn { margin-top: 24rpx; }
 .mt8 { margin-top: 8rpx; }
+.entry-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20rpx 0; border-bottom: 1rpx solid #f7f8fa;
+}
+.entry-row:last-child { border-bottom: none; }
+.entry-title { font-size: 28rpx; font-weight: 600; color: #c2410c; }
+.arrow { color: #c3c7cc; }
 </style>

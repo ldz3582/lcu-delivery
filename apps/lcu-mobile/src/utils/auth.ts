@@ -18,6 +18,8 @@ export interface LoginResp {
 const ROLE_KEY = 'lcu_role'
 const USER_KEY = 'lcu_user'
 const OPENID_KEY = 'lcu_openid'
+/** 每个角色记住上次选的演示账号（商家=哪家店，骑手=哪个骑手） */
+const ACCOUNT_KEY = 'lcu_account_'
 
 /** 每个角色的首页 */
 export const HOME: Record<Role, string> = {
@@ -65,12 +67,48 @@ function deviceOpenid(): string {
   return openid
 }
 
-/** 用户 / 商家 / 骑手：mock 登录（没有 AppID 也能跑通全流程） */
-export async function loginByRole(role: Role): Promise<LoginResp> {
-  let openid = deviceOpenid()
-  if (role === 'MERCHANT') openid = 'mock_merchant'
-  if (role === 'RIDER') openid = 'mock_rider'
-  const resp = await http.post<LoginResp>('/api/auth/mock-login', { openid, role })
+export interface MockAccount {
+  openid: string
+  nickname?: string
+  /** 商家 */
+  shopId?: number
+  shopName?: string
+  campus?: number
+  auditStatus?: number
+  bizStatus?: number
+  /** 骑手 */
+  riderId?: number
+  riderName?: string
+  score?: number
+}
+
+/** 上次选的演示账号（没有就返回空串） */
+export function savedOpenid(role: Role): string {
+  return uni.getStorageSync(ACCOUNT_KEY + role) || ''
+}
+
+/** 演示账号列表：mock 环境才有数据，真实环境返回空数组，调用方自行降级 */
+export async function fetchMockAccounts(role: Role): Promise<MockAccount[]> {
+  try {
+    return await http.get<MockAccount[]>('/api/auth/mock-accounts', { role }, { showError: false })
+  } catch (e) {
+    return []
+  }
+}
+
+/**
+ * 用户 / 商家 / 骑手：mock 登录（没有 AppID 也能跑通全流程）。
+ * 传 openid 可指定「哪家店 / 哪个骑手」，不传用上次选的，再没有才用默认账号。
+ */
+export async function loginByRole(role: Role, openid?: string): Promise<LoginResp> {
+  let oid = openid || savedOpenid(role)
+  if (!oid) {
+    if (role === 'MERCHANT') oid = 'mock_merchant'
+    else if (role === 'RIDER') oid = 'mock_rider'
+    else oid = deviceOpenid()
+  }
+  const resp = await http.post<LoginResp>('/api/auth/mock-login', { openid: oid, role })
+  uni.setStorageSync(ACCOUNT_KEY + role, oid)
   persist(resp, role)
   return resp
 }

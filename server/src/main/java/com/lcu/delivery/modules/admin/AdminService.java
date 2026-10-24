@@ -15,6 +15,7 @@ import com.lcu.delivery.modules.fence.FenceService;
 import com.lcu.delivery.modules.order.OrderStatus;
 import com.lcu.delivery.modules.order.entity.Order;
 import com.lcu.delivery.modules.order.mapper.OrderMapper;
+import com.lcu.delivery.modules.settle.SettlementService;
 import com.lcu.delivery.modules.settle.entity.Settlement;
 import com.lcu.delivery.modules.settle.mapper.SettlementMapper;
 import com.lcu.delivery.modules.shop.entity.Shop;
@@ -43,11 +44,13 @@ public class AdminService {
     private final JwtService jwtService;
     private final JdbcTemplate jdbc;
     private final FenceService fenceService;
+    private final SettlementService settlementService;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     public AdminService(AdminUserMapper adminMapper, ShopMapper shopMapper, RiderMapper riderMapper,
                         OrderMapper orderMapper, SettlementMapper settlementMapper, JwtService jwtService,
-                        JdbcTemplate jdbc, FenceService fenceService) {
+                        JdbcTemplate jdbc, FenceService fenceService, SettlementService settlementService) {
+        this.settlementService = settlementService;
         this.adminMapper = adminMapper;
         this.shopMapper = shopMapper;
         this.riderMapper = riderMapper;
@@ -147,10 +150,26 @@ public class AdminService {
             m.put("bizStatus", s.getBizStatus());
             m.put("licenseUrl", s.getLicenseUrl());
             m.put("permitUrl", s.getPermitUrl());
+            m.put("photos", parseList(s.getPhotos()));
+            m.put("rejectReason", s.getRejectReason());
+            m.put("createdAt", s.getCreatedAt() == null ? null : s.getCreatedAt().toString());
             m.put("commissionRate", s.getCommissionRate());
             rows.add(m);
         }
         return new PageResult<>(rows, p.getTotal(), page, size);
+    }
+
+    private List<String> parseList(String json) {
+        if (json == null || json.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+                    });
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
     }
 
     @Transactional
@@ -159,9 +178,18 @@ public class AdminService {
         if (shop == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "店铺不存在");
         }
-        shop.setAuditStatus(pass ? 1 : 2);
+        int status = pass ? 1 : 2;
+        String reject = pass ? null
+                : (reason == null || reason.isBlank() ? "资料不齐，请补充后重新提交" : reason);
+        shop.setAuditStatus(status);
+        shop.setRejectReason(reject);
         shop.setUpdatedAt(LocalDateTime.now());
-        shopMapper.updateById(shop);
+        // 注意：updateById 会跳过 null 字段，通过时必须用 wrapper 显式把 reject_reason 清空
+        shopMapper.update(null, Wrappers.<Shop>lambdaUpdate()
+                .eq(Shop::getId, shopId)
+                .set(Shop::getAuditStatus, status)
+                .set(Shop::getRejectReason, reject)
+                .set(Shop::getUpdatedAt, LocalDateTime.now()));
     }
 
     public PageResult<Map<String, Object>> riders(Integer auditStatus, int page, int size) {
@@ -218,6 +246,19 @@ public class AdminService {
             rows.add(m);
         }
         return new PageResult<>(rows, p.getTotal(), page, size);
+    }
+
+    /** 手动结算一单：演示/财务应急用（正常由 SettleJob 按 T+N 自动跑）。 */
+    @Transactional
+    public void settleOne(Long settlementId) {
+        Settlement s = settlementMapper.selectById(settlementId);
+        if (s == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "结算单不存在");
+        }
+        if (s.getStatus() != null && s.getStatus() == 1) {
+            throw new BizException(ErrorCode.ORDER_STATUS, "这单已经结算过了");
+        }
+        settlementService.settle(s);
     }
 
     public PageResult<Settlement> settlements(int page, int size) {

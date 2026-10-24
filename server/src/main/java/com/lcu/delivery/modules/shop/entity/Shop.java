@@ -35,6 +35,10 @@ public class Shop {
     private Integer auditStatus;
     private String licenseUrl;
     private String permitUrl;
+    /** 门店照片 JSON 数组字符串 */
+    private String photos;
+    /** 审核驳回原因 */
+    private String rejectReason;
     private Integer settleStatus;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -206,6 +210,22 @@ public class Shop {
 
     public void setPermitUrl(String permitUrl) {
         this.permitUrl = permitUrl;
+    }
+
+    public String getPhotos() {
+        return photos;
+    }
+
+    public void setPhotos(String photos) {
+        this.photos = photos;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
     }
 
     public Integer getSettleStatus() {

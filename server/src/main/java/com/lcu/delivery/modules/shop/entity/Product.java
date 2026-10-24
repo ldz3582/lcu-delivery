@@ -24,6 +24,8 @@ public class Product {
     private Integer stock;
     private Integer sales;
     private Integer hasSku;
+    /** 套餐组成 JSON：[{"productId":1,"name":"黄焖鸡","qty":1}]，非套餐为 null */
+    private String comboItems;
     /** 1 上架 0 下架 */
     private Integer status;
     private Integer sort;
@@ -117,6 +119,14 @@ public class Product {
 
     public void setHasSku(Integer hasSku) {
         this.hasSku = hasSku;
+    }
+
+    public String getComboItems() {
+        return comboItems;
+    }
+
+    public void setComboItems(String comboItems) {
+        this.comboItems = comboItems;
     }
 
     public Integer getStatus() {

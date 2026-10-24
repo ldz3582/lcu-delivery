@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { auditShop, getShops, type Shop } from '@/api'
-import { auditMeta, campusText, formatRate } from '@/utils/format'
+import { auditMeta, campusText, formatDateTime, formatRate } from '@/utils/format'
 
 const loading = ref(false)
 const list = ref<Shop[]>([])
@@ -60,41 +60,49 @@ function handleSizeChange(s: number) {
   load()
 }
 
-async function handlePass(row: Shop) {
-  try {
-    await ElMessageBox.confirm(`确认通过商家「${row.name}」的入驻审核？`, '审核通过', {
-      confirmButtonText: '通过',
-      cancelButtonText: '取消',
-      type: 'info',
-    })
-  } catch {
-    return
-  }
-  await auditShop(row.id, true, '')
-  ElMessage.success('审核已通过')
-  load()
+// ---------------- 审核弹窗 ----------------
+
+const auditVisible = ref(false)
+const current = ref<Shop | null>(null)
+const reason = ref('')
+const submitting = ref(false)
+
+function openAudit(row: Shop) {
+  current.value = row
+  reason.value = ''
+  auditVisible.value = true
 }
 
-async function handleReject(row: Shop) {
-  let reason = ''
-  try {
-    const { value } = await ElMessageBox.prompt(
-      `请输入驳回商家「${row.name}」的原因`,
-      '驳回审核',
-      {
-        confirmButtonText: '驳回',
-        cancelButtonText: '取消',
-        inputPlaceholder: '例如：证照信息不清晰',
-        inputValidator: (v: string) => (v && v.trim() ? true : '请填写驳回原因'),
-      },
-    )
-    reason = (value || '').trim()
-  } catch {
+function closeAudit() {
+  auditVisible.value = false
+  current.value = null
+  reason.value = ''
+}
+
+async function submitAudit(pass: boolean) {
+  const row = current.value
+  if (!row) return
+  const text = reason.value.trim()
+  if (!pass && !text) {
+    ElMessage.warning('请填写驳回原因，商家端会看到这段说明')
     return
   }
-  await auditShop(row.id, false, reason)
-  ElMessage.success('已驳回')
-  load()
+  submitting.value = true
+  try {
+    await auditShop(row.id, pass, pass ? '' : text)
+    ElMessage.success(pass ? '审核已通过' : '已驳回，已记录驳回原因')
+    closeAudit()
+    await load()
+  } catch {
+    // 错误提示由 axios 拦截器统一弹出
+  } finally {
+    submitting.value = false
+  }
+}
+
+/** el-image 预览用：把单张图包成数组 */
+function previewList(url: string | undefined | null): string[] {
+  return url ? [url] : []
 }
 
 onMounted(load)
@@ -127,70 +135,95 @@ onMounted(load)
       </div>
 
       <el-table v-loading="loading" :data="list" border stripe size="default">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="商家名称" min-width="160" show-overflow-tooltip />
-        <el-table-column label="校区" width="100">
+        <el-table-column prop="id" label="ID" width="56" />
+        <el-table-column label="商家名称" width="126" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="shop-name">{{ row.name }}</div>
+            <el-tag :type="row.bizStatus === 1 ? 'success' : 'info'" size="small" effect="plain">
+              {{ row.bizStatus === 1 ? '营业中' : '休息中' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="校区" width="72">
           <template #default="{ row }">{{ campusText(row.campus) }}</template>
         </el-table-column>
-        <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="contactPhone" label="联系电话" width="130" />
-        <el-table-column label="佣金比例" width="110">
-          <template #default="{ row }">{{ formatRate(row.commissionRate) }}</template>
+        <el-table-column prop="address" label="地址" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="contactPhone" label="联系电话" width="112" />
+        <el-table-column label="证照" width="122">
+          <template #default="{ row }">
+            <div class="thumbs">
+              <el-image
+                v-if="row.licenseUrl"
+                :src="row.licenseUrl"
+                :preview-src-list="previewList(row.licenseUrl)"
+                fit="cover"
+                class="thumb"
+                title="营业执照"
+              >
+                <template #error>
+                  <div class="thumb-err">执照</div>
+                </template>
+              </el-image>
+              <span v-else class="muted mini">执照 -</span>
+              <el-image
+                v-if="row.permitUrl"
+                :src="row.permitUrl"
+                :preview-src-list="previewList(row.permitUrl)"
+                fit="cover"
+                class="thumb"
+                title="食品经营许可证"
+              >
+                <template #error>
+                  <div class="thumb-err">许可</div>
+                </template>
+              </el-image>
+              <span v-else class="muted mini">许可 -</span>
+            </div>
+          </template>
         </el-table-column>
-        <el-table-column label="审核状态" width="110">
+        <el-table-column label="门店照片" width="122">
+          <template #default="{ row }">
+            <div v-if="row.photos && row.photos.length" class="thumbs">
+              <el-image
+                v-for="(photo, idx) in row.photos.slice(0, 3)"
+                :key="idx"
+                :src="photo"
+                :preview-src-list="row.photos"
+                :initial-index="idx"
+                fit="cover"
+                class="thumb"
+              >
+                <template #error>
+                  <div class="thumb-err">门店</div>
+                </template>
+              </el-image>
+              <span v-if="row.photos.length > 3" class="muted mini">+{{ row.photos.length - 3 }}</span>
+            </div>
+            <span v-else class="muted mini">未上传</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="申请时间" width="140">
+          <template #default="{ row }">
+            <span class="num muted">{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="审核状态" width="88">
           <template #default="{ row }">
             <el-tag :type="auditMeta(row.auditStatus).type" size="small">
               {{ auditMeta(row.auditStatus).text }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="营业状态" width="110">
+        <el-table-column label="驳回原因" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="row.bizStatus === 1 ? 'success' : 'info'" size="small">
-              {{ row.bizStatus === 1 ? '营业中' : '休息中' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="证照" width="150">
-          <template #default="{ row }">
-            <el-link
-              v-if="row.licenseUrl"
-              :href="row.licenseUrl"
-              target="_blank"
-              type="primary"
-              class="link"
-            >
-              营业执照
-            </el-link>
+            <span v-if="row.rejectReason" class="reject-reason">{{ row.rejectReason }}</span>
             <span v-else class="muted">-</span>
-            <el-link
-              v-if="row.permitUrl"
-              :href="row.permitUrl"
-              target="_blank"
-              type="primary"
-              class="link"
-            >
-              许可证
-            </el-link>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="86">
           <template #default="{ row }">
-            <el-button
-              size="small"
-              type="success"
-              :disabled="row.auditStatus === 1"
-              @click="handlePass(row)"
-            >
-              通过
-            </el-button>
-            <el-button
-              size="small"
-              type="danger"
-              :disabled="row.auditStatus === 2"
-              @click="handleReject(row)"
-            >
-              驳回
+            <el-button size="small" type="primary" @click="openAudit(row)">
+              {{ row.auditStatus === 0 ? '审核' : '查看' }}
             </el-button>
           </template>
         </el-table-column>
@@ -212,11 +245,220 @@ onMounted(load)
         />
       </div>
     </div>
+
+    <!-- 审核弹窗 -->
+    <el-dialog
+      v-model="auditVisible"
+      :title="current?.auditStatus === 0 ? '商家入驻审核' : '商家资料'"
+      width="620px"
+      :close-on-click-modal="false"
+    >
+      <template v-if="current">
+        <el-descriptions :column="2" border size="small" class="mb">
+          <el-descriptions-item label="商家名称">{{ current.name }}</el-descriptions-item>
+          <el-descriptions-item label="校区">{{ campusText(current.campus) }}</el-descriptions-item>
+          <el-descriptions-item label="联系电话">{{ current.contactPhone }}</el-descriptions-item>
+          <el-descriptions-item label="佣金比例">{{ formatRate(current.commissionRate) }}</el-descriptions-item>
+          <el-descriptions-item label="地址" :span="2">{{ current.address }}</el-descriptions-item>
+          <el-descriptions-item label="申请时间">
+            {{ formatDateTime(current.createdAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="审核状态">
+            <el-tag :type="auditMeta(current.auditStatus).type" size="small">
+              {{ auditMeta(current.auditStatus).text }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <div class="img-block">
+          <div class="img-group">
+            <div class="img-label">营业执照</div>
+            <el-image
+              v-if="current.licenseUrl"
+              :src="current.licenseUrl"
+              :preview-src-list="previewList(current.licenseUrl)"
+              fit="cover"
+              class="img-lg"
+            >
+              <template #error>
+                <div class="thumb-err">加载失败</div>
+              </template>
+            </el-image>
+            <div v-else class="img-placeholder">未上传</div>
+          </div>
+          <div class="img-group">
+            <div class="img-label">食品经营许可证</div>
+            <el-image
+              v-if="current.permitUrl"
+              :src="current.permitUrl"
+              :preview-src-list="previewList(current.permitUrl)"
+              fit="cover"
+              class="img-lg"
+            >
+              <template #error>
+                <div class="thumb-err">加载失败</div>
+              </template>
+            </el-image>
+            <div v-else class="img-placeholder">未上传</div>
+          </div>
+        </div>
+
+        <div class="img-block">
+          <div class="img-group img-group-wide">
+            <div class="img-label">门店照片（{{ current.photos?.length ?? 0 }} 张）</div>
+            <div v-if="current.photos && current.photos.length" class="thumbs">
+              <el-image
+                v-for="(photo, idx) in current.photos"
+                :key="idx"
+                :src="photo"
+                :preview-src-list="current.photos"
+                :initial-index="idx"
+                fit="cover"
+                class="img-lg"
+              >
+                <template #error>
+                  <div class="thumb-err">加载失败</div>
+                </template>
+              </el-image>
+            </div>
+            <div v-else class="img-placeholder">未上传门店照片</div>
+          </div>
+        </div>
+
+        <div v-if="current.rejectReason" class="reject-box">
+          上次驳回原因：{{ current.rejectReason }}
+        </div>
+
+        <el-form label-width="90px" class="mt">
+          <el-form-item label="驳回原因">
+            <el-input
+              v-model="reason"
+              type="textarea"
+              :rows="3"
+              maxlength="200"
+              show-word-limit
+              :disabled="submitting"
+              placeholder="驳回时必填，例如：门店照片与营业执照信息不一致，请重新上传"
+            />
+          </el-form-item>
+        </el-form>
+      </template>
+
+      <template #footer>
+        <el-button @click="closeAudit" :disabled="submitting">关闭</el-button>
+        <el-button type="danger" :loading="submitting" @click="submitAudit(false)">驳回</el-button>
+        <el-button
+          type="success"
+          :loading="submitting"
+          :disabled="current?.auditStatus === 1"
+          @click="submitAudit(true)"
+        >
+          通过
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.link + .link {
-  margin-left: 8px;
+.shop-name {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.mini {
+  font-size: 12px;
+}
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.thumb-err {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #909399;
+  background: #f5f7fa;
+}
+
+.reject-reason {
+  color: #f56c6c;
+}
+
+.mb {
+  margin-bottom: 14px;
+}
+
+.mt {
+  margin-top: 6px;
+}
+
+.img-block {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.img-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.img-group-wide {
+  width: 100%;
+}
+
+.img-label {
+  font-size: 12px;
+  color: #606266;
+}
+
+.img-lg {
+  width: 96px;
+  height: 96px;
+  border-radius: 6px;
+  border: 1px solid #ebeef5;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.img-placeholder {
+  width: 96px;
+  height: 96px;
+  border-radius: 6px;
+  border: 1px dashed #dcdfe6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #909399;
+  background: #fafafa;
+}
+
+.reject-box {
+  color: #f56c6c;
+  background: #fef0f0;
+  border: 1px solid #fde2e2;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
 }
 </style>

@@ -35,6 +35,12 @@ public class OrderController {
         return Result.ok(orderService.detail(UserContext.userId(), id));
     }
 
+    /** 订单追踪：时间轴 + 骑手 + 实时位置（用户端 5 秒轮询）。 */
+    @GetMapping("/{id}/track")
+    public Result<Map<String, Object>> track(@PathVariable Long id) {
+        return Result.ok(orderService.track(UserContext.userId(), id));
+    }
+
     public record CancelReq(String reason) {
     }
 

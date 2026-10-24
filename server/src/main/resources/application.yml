@@ -50,6 +50,10 @@ app:
   fence-enforce: ${APP_FENCE_ENFORCE:true}
   # T+N 结算冻结天数
   settle-freeze-days: ${APP_SETTLE_FREEZE_DAYS:1}
+  # 上传文件落盘目录（生产可换对象存储，只需改 UploadController）
+  upload-dir: ${APP_UPLOAD_DIR:./uploads}
+  # 图片对外访问的绝对地址前缀；留空则按请求 Host 自动拼
+  public-base-url: ${APP_PUBLIC_BASE_URL:}
 
 wechat:
   miniapp:

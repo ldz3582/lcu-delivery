@@ -12,7 +12,7 @@
         v-for="r in roles"
         :key="r.key"
         :class="['tab', role === r.key ? 'on' : '']"
-        @click="role = r.key"
+        @click="pickRole(r.key)"
       >{{ r.label }}</view>
     </view>
 
@@ -34,10 +34,36 @@
       <view class="hint center">微信登录需在 ops/.env 配置 AppSecret 后可用</view>
     </view>
 
-    <!-- 商家 / 骑手：演示账号直接进入 -->
+    <!-- 商家 / 骑手：选择演示账号后进入 -->
     <view v-else class="card">
-      <view class="muted">演示账号：{{ role === 'MERCHANT' ? 'mock_merchant（一食堂·黄焖鸡）' : 'mock_rider（骑手小张）' }}</view>
+      <view class="muted pick-title">
+        {{ accounts.length ? (role === 'MERCHANT' ? '选择要进入的店铺：' : '选择骑手账号：') : '演示账号' }}
+      </view>
+
+      <view v-if="accounts.length" class="acct-list">
+        <view
+          v-for="a in accounts"
+          :key="a.openid"
+          :class="['acct', picked === a.openid ? 'on' : '']"
+          @click="picked = a.openid"
+        >
+          <view class="acct-main">
+            <text class="acct-name">{{ role === 'MERCHANT' ? a.shopName : (a.riderName || a.nickname) }}</text>
+            <text class="acct-sub">
+              {{ a.openid }}
+              <template v-if="role === 'MERCHANT' && a.auditStatus !== 1">· 待审核</template>
+              <template v-else-if="role === 'MERCHANT' && a.bizStatus !== 1">· 休息中</template>
+            </text>
+          </view>
+          <text v-if="picked === a.openid" class="acct-check">✓</text>
+        </view>
+      </view>
+      <view v-else class="muted">
+        {{ role === 'MERCHANT' ? 'mock_merchant（一食堂·黄焖鸡）' : 'mock_rider（骑手小张）' }}
+      </view>
+
       <view class="btn" @click="doStaffLogin">{{ loading ? '处理中…' : '进入' + ROLE_LABEL[role] + '端' }}</view>
+      <view class="hint center">演示账号列表来自 GET /api/auth/mock-accounts（仅 mock 环境有数据）</view>
     </view>
 
     <view class="foot">
@@ -52,11 +78,14 @@ import { onLoad } from '@dcloudio/uni-app'
 import {
   HOME,
   ROLE_LABEL,
+  fetchMockAccounts,
   loginByRole,
   loginByStuNo,
   loginByWechat,
   currentRole,
+  savedOpenid,
   logout,
+  type MockAccount,
   type Role
 } from '../../utils/auth'
 import { identityApi } from '../../api'
@@ -71,11 +100,27 @@ const role = ref<Role>('USER')
 const stuNo = ref('')
 const loading = ref(false)
 const requireIdentity = ref(false)
+const accounts = ref<MockAccount[]>([])
+const picked = ref('')
+
+/** 切换身份时按角色拉演示账号：商家选店、骑手选人 */
+async function pickRole(r: Role) {
+  role.value = r
+  picked.value = ''
+  accounts.value = []
+  if (r === 'USER') return
+  const list = await fetchMockAccounts(r)
+  accounts.value = list
+  const saved = savedOpenid(r)
+  const hit = list.find((a) => a.openid === saved)
+  picked.value = (hit || list[0])?.openid || ''
+}
 
 onLoad(async (q: any) => {
   if (q?.role && ['USER', 'MERCHANT', 'RIDER'].includes(q.role)) role.value = q.role
   const cur = currentRole()
   if (cur) role.value = cur
+  await pickRole(role.value)
   try {
     const cfg = await identityApi.config()
     requireIdentity.value = !!cfg.required
@@ -144,7 +189,7 @@ async function doStaffLogin() {
   if (loading.value) return
   loading.value = true
   try {
-    await loginByRole(role.value)
+    await loginByRole(role.value, picked.value || undefined)
     uni.reLaunch({ url: HOME[role.value] })
   } catch (e) {
     // request 层已提示
@@ -156,6 +201,18 @@ async function doStaffLogin() {
 
 <style scoped>
 .page { padding: 90rpx 40rpx 60rpx; }
+.pick-title { margin-bottom: 16rpx; }
+.acct-list { max-height: 620rpx; overflow-y: auto; margin-bottom: 20rpx; }
+.acct {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20rpx 22rpx; margin-bottom: 12rpx; border-radius: 16rpx;
+  background: #f7f8fa; border: 2rpx solid transparent;
+}
+.acct.on { border-color: #c2410c; background: #fff5ef; }
+.acct-main { display: flex; flex-direction: column; }
+.acct-name { font-size: 28rpx; color: #1f2328; font-weight: 600; }
+.acct-sub { font-size: 22rpx; color: #9ca3af; margin-top: 4rpx; }
+.acct-check { color: #c2410c; font-size: 32rpx; font-weight: 700; }
 .brand { text-align: center; margin-bottom: 40rpx; }
 .logo {
   width: 132rpx; height: 132rpx; border-radius: 32rpx; margin: 0 auto 20rpx;

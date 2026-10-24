@@ -14,6 +14,12 @@
       </view>
     </view>
 
+    <view class="coupon-bar" @click="goCoupons">
+      <text class="cb-icon">🎟️</text>
+      <text class="cb-text">领券中心 · 先领券再下单更划算</text>
+      <text class="cb-arrow">去看看 ›</text>
+    </view>
+
     <scroll-view class="cats" scroll-x>
       <view :class="['cat', activeCat === null ? 'active' : '']" @click="pickCategory(null)">全部</view>
       <view
@@ -102,6 +108,10 @@ function goShop(id: number) {
   uni.navigateTo({ url: `/pages/shop/detail?id=${id}` })
 }
 
+function goCoupons() {
+  uni.navigateTo({ url: '/pages/coupon/index' })
+}
+
 onShow(async () => {
   if (!guard('USER')) return
   if (!categories.value.length) {
@@ -141,6 +151,15 @@ onPullDownRefresh(async () => {
 }
 .search input { flex: 1; font-size: 28rpx; }
 .search-btn { color: #c2410c; font-size: 28rpx; padding-left: 16rpx; }
+.coupon-bar {
+  display: flex; align-items: center; gap: 12rpx;
+  margin: 16rpx 20rpx 0;
+  background: #fff7ed; border: 1rpx solid #fed7aa;
+  border-radius: 16rpx; padding: 18rpx 22rpx;
+}
+.cb-icon { font-size: 28rpx; }
+.cb-text { flex: 1; font-size: 24rpx; color: #c2410c; }
+.cb-arrow { font-size: 22rpx; color: #ea580c; }
 .cats { white-space: nowrap; padding: 20rpx 16rpx 4rpx; background: #fff; }
 .cat {
   display: inline-block;

@@ -30,6 +30,12 @@ public class MerchantController {
         return Result.ok(m);
     }
 
+    /** 入驻状态：没店 / 待审核 / 驳回（带原因） / 已通过 */
+    @GetMapping("/status")
+    public Result<Map<String, Object>> status() {
+        return Result.ok(merchantService.status(UserContext.userId()));
+    }
+
     @GetMapping("/shop")
     public Result<Map<String, Object>> shop() {
         Shop s = merchantService.requireShop(UserContext.userId());
@@ -78,6 +84,33 @@ public class MerchantController {
     @PostMapping("/orders/{id}/ready")
     public Result<Void> ready(@PathVariable Long id) {
         merchantService.ready(UserContext.userId(), id);
+        return Result.ok();
+    }
+
+    // ---------------- 规格 SKU ----------------
+
+    @GetMapping("/products/{id}/skus")
+    public Result<List<com.lcu.delivery.modules.shop.entity.ProductSku>> skus(@PathVariable Long id) {
+        return Result.ok(merchantService.skus(UserContext.userId(), id));
+    }
+
+    @PostMapping("/products/{id}/skus")
+    public Result<com.lcu.delivery.modules.shop.entity.ProductSku> createSku(
+            @PathVariable Long id,
+            @RequestBody com.lcu.delivery.modules.shop.entity.ProductSku sku) {
+        return Result.ok(merchantService.createSku(UserContext.userId(), id, sku));
+    }
+
+    @PutMapping("/skus/{skuId}")
+    public Result<com.lcu.delivery.modules.shop.entity.ProductSku> updateSku(
+            @PathVariable Long skuId,
+            @RequestBody com.lcu.delivery.modules.shop.entity.ProductSku sku) {
+        return Result.ok(merchantService.updateSku(UserContext.userId(), skuId, sku));
+    }
+
+    @DeleteMapping("/skus/{skuId}")
+    public Result<Void> deleteSku(@PathVariable Long skuId) {
+        merchantService.deleteSku(UserContext.userId(), skuId);
         return Result.ok();
     }
 
