@@ -8,3 +8,7 @@ server/certs/
 ops/data/
 uploads/
 ops/uploads/
+__pycache__/
+*.pyc
+starter/data/
+starter/certs/

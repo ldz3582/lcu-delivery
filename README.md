@@ -1,6 +1,6 @@
 # 聊城大学校园外卖小程序 · 一期工程
 
-配套文档：《聊大外卖小程序_开发行动手册.docx》。这里是可以直接跑起来的一期骨架。
+配套文档见 [`docs/design/`](docs/design)：设计方案与开发行动手册（Word）。这里是可以直接跑起来的一期骨架。
 
 ## 目录
 
@@ -17,11 +17,28 @@ lcu-delivery/
 │   ├── sql/                schema.sql（29 表）/ seed.sql（开关）/ demo.sql（演示数据）
 │   ├── dev.sh              一键启动
 │   └── smoke-test.sh       端到端冒烟测试
+├── starter/                启动包：30 分钟拉起依赖服务 + 29 张表的独立最小版本
+├── tools/docgen/           行动手册 docx 的生成脚本（python-docx）
 └── docs/
     ├── API.md              接口清单（123 个，含评价/售后/券/订阅/收藏/商家资金/骑手派单/上传）
     ├── gen_api.py          从 Controller 注解生成接口文档
-    └── gen_entities.py     从字段定义生成实体/Mapper
+    ├── gen_entities.py     从字段定义生成实体/Mapper
+    └── design/             设计方案.docx、开发行动手册.docx
 ```
+
+## 交付物
+
+| 内容 | 位置 | 说明 |
+| --- | --- | --- |
+| 设计方案 | `docs/design/聊大外卖小程序设计方案.docx` | 需求、角色、数据模型 |
+| 开发行动手册 | `docs/design/聊大外卖小程序_开发行动手册.docx` | 9 章 + 附录，含环境、接口、上线、验收 |
+| 手册生成脚本 | `tools/docgen/` | 改内容后 `python build.py` 重新出 Word |
+| 启动包 | `starter/` | `docker compose up -d` 拉起 MySQL/Redis/MinIO 并建表 |
+| 一期代码 | `server/` `apps/` | 后端 + 四端小程序 + 管理后台 |
+
+> `starter/` 是手册配套的最小启动包；日常开发请用演进的 `ops/`。
+> 仓库内只有 `.env.example` 占位符，真实密钥（AppSecret、APIv3、证书）一律不入库。
+
 
 ## 统一小程序（lcu-mobile）
 
