@@ -41,19 +41,6 @@ export function auditMeta(status: number | null | undefined): StatusMeta {
   return AUDIT_STATUS[Number(status)] ?? { text: '未知', type: 'info' }
 }
 
-/** 商家营业状态：0休息 1营业 */
-export const BIZ_STATUS: Record<number, StatusMeta> = {
-  0: { text: '休息中', type: 'info' },
-  1: { text: '营业中', type: 'success' },
-}
-
-/** 骑手工作状态：0离线 1接单中 2忙碌 */
-export const WORK_STATUS: Record<number, StatusMeta> = {
-  0: { text: '离线', type: 'info' },
-  1: { text: '接单中', type: 'success' },
-  2: { text: '忙碌', type: 'warning' },
-}
-
 /** 订单状态 */
 export const ORDER_STATUS: Record<number, StatusMeta> = {
   0: { text: '待支付', type: 'info' },

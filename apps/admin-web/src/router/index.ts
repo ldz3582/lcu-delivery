@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { TOKEN_KEY } from '@/api/http'
+import { ROLE_KEY, TOKEN_KEY } from '@/api/http'
+import { roleHome } from '@/utils/role'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -13,7 +14,8 @@ const router = createRouter({
     {
       path: '/',
       component: () => import('@/layout/AppLayout.vue'),
-      redirect: '/overview',
+      // 根路径按当前角色落到各自的首页，避免非 SUPER 角色落到菜单里没有的页面
+      redirect: () => roleHome(localStorage.getItem(ROLE_KEY)),
       children: [
         {
           path: 'overview',
@@ -98,6 +100,30 @@ const router = createRouter({
           name: 'notify-logs',
           component: () => import('@/views/NotifyLogsView.vue'),
           meta: { title: '消息日志' },
+        },
+        {
+          path: 'announcements',
+          name: 'announcements',
+          component: () => import('@/views/AnnouncementsView.vue'),
+          meta: { title: '平台公告' },
+        },
+        {
+          path: 'banners',
+          name: 'banners',
+          component: () => import('@/views/BannersView.vue'),
+          meta: { title: 'Banner 管理' },
+        },
+        {
+          path: 'feedbacks',
+          name: 'feedbacks',
+          component: () => import('@/views/FeedbacksView.vue'),
+          meta: { title: '用户反馈' },
+        },
+        {
+          path: 'accounts',
+          name: 'accounts',
+          component: () => import('@/views/AccountsView.vue'),
+          meta: { title: '账号权限' },
         },
       ],
     },

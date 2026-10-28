@@ -18,6 +18,10 @@ import {
   CircleClose,
   Message,
   SwitchButton,
+  Bell,
+  Key,
+  Picture,
+  ChatLineSquare,
 } from '@element-plus/icons-vue'
 import { NAME_KEY, ROLE_KEY, TOKEN_KEY } from '@/api/http'
 
@@ -27,9 +31,19 @@ const route = useRoute()
 const realName = ref(localStorage.getItem(NAME_KEY) || '管理员')
 const role = ref(localStorage.getItem(ROLE_KEY) || '')
 
+const ROLE_LABELS: Record<string, string> = {
+  SUPER: '超级管理员',
+  FINANCE: '财务',
+  AUDITOR: '审核员',
+  CS: '订单客服',
+  OPERATOR: '运营',
+}
+
+const roleLabel = computed(() => ROLE_LABELS[role.value.toUpperCase()] || role.value)
+
 const activeMenu = computed(() => route.path)
 
-const menus = [
+const ALL_MENUS = [
   { path: '/overview', label: '概览', icon: DataBoard },
   { path: '/users', label: '用户管理', icon: User },
   { path: '/shops', label: '商家审核', icon: Shop },
@@ -43,8 +57,32 @@ const menus = [
   { path: '/penalties', label: '骑手处罚', icon: CircleClose },
   { path: '/reviews', label: '评价管理', icon: ChatDotRound },
   { path: '/notify-logs', label: '消息日志', icon: Message },
+  { path: '/announcements', label: '平台公告', icon: Bell },
+  { path: '/banners', label: 'Banner 管理', icon: Picture },
+  { path: '/feedbacks', label: '用户反馈', icon: ChatLineSquare },
+  { path: '/accounts', label: '账号权限', icon: Key },
   { path: '/configs', label: '平台配置', icon: Setting },
 ]
+
+/** 角色可见菜单：null = 全部；未列出的角色按只读运营处理 */
+const ROLE_MENUS: Record<string, string[] | null> = {
+  SUPER: null,
+  FINANCE: ['/overview', '/settlements', '/withdrawals'],
+  AUDITOR: ['/shops', '/riders', '/users'],
+  CS: ['/orders', '/after-sales', '/reviews', '/incidents'],
+}
+
+/** 运营只读：除账号权限 / 平台配置（仅 SUPER）外均可查看 */
+const OPERATOR_PATHS = ALL_MENUS.map((m) => m.path).filter(
+  (p) => p !== '/accounts' && p !== '/configs',
+)
+
+const menus = computed(() => {
+  const current = (role.value || 'OPERATOR').toUpperCase()
+  const allowed = ROLE_MENUS[current] ?? OPERATOR_PATHS
+  if (allowed === null) return ALL_MENUS
+  return ALL_MENUS.filter((m) => allowed.includes(m.path))
+})
 
 async function handleLogout() {
   try {
@@ -83,7 +121,7 @@ async function handleLogout() {
         <div class="header-title">{{ route.meta.title || '' }}</div>
         <div class="header-right">
           <span class="user">{{ realName }}</span>
-          <el-tag v-if="role" size="small" type="info">{{ role }}</el-tag>
+          <el-tag v-if="role" size="small" type="info">{{ roleLabel }}</el-tag>
           <el-button link type="primary" :icon="SwitchButton" @click="handleLogout">
             退出
           </el-button>

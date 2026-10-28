@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { login } from '@/api'
 import { NAME_KEY, ROLE_KEY, TOKEN_KEY } from '@/api/http'
+import { roleHome } from '@/utils/role'
 
 const router = useRouter()
 const route = useRoute()
@@ -32,8 +33,11 @@ async function handleLogin() {
     localStorage.setItem(NAME_KEY, data.realName || data.username || '管理员')
     localStorage.setItem(ROLE_KEY, data.role || '')
     ElMessage.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/'
-    router.replace(redirect)
+    // 默认按角色落地：FINANCE → 结算、AUDITOR → 商家审核、CS → 订单；
+    // 显式 redirect 到其他页面时仍然尊重（如从受限页被踢回登录）。
+    const requested = (route.query.redirect as string) || ''
+    const isDefaultEntry = !requested || requested === '/' || requested === '/overview'
+    router.replace(isDefaultEntry ? roleHome(data.role) : requested)
   } catch {
     // 错误提示已由 axios 拦截器统一处理
   } finally {

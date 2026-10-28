@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { auditRider, getRiders, type Rider } from '@/api'
+import { auditRider, getRiders, updateRiderStatus, type Rider } from '@/api'
 import { auditMeta, formatDateTime } from '@/utils/format'
 
 const loading = ref(false)
@@ -122,6 +122,66 @@ function previewList(url: string | undefined | null): string[] {
   return url ? [url] : []
 }
 
+// ---------------- 封禁 / 解封 ----------------
+
+/** 后端骑手列表暂未返回 status，操作后就地记忆 */
+const bannedState = reactive<Record<number, boolean>>({})
+
+function isBanned(row: Rider): boolean {
+  if (row.status !== undefined && row.status !== null) return Number(row.status) === 0
+  return Boolean(bannedState[row.id])
+}
+
+async function handleBan(row: Rider) {
+  if (isBanned(row)) {
+    try {
+      await ElMessageBox.confirm(`确认解封骑手 #${row.id}？解封后可正常接单。`, '解封骑手', {
+        confirmButtonText: '确认解封',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+    try {
+      await updateRiderStatus(row.id, 1)
+      row.status = 1
+      bannedState[row.id] = false
+      ElMessage.success('已解封')
+    } catch {
+      // 错误提示由 axios 拦截器统一弹出
+    }
+    return
+  }
+
+  let reason = ''
+  try {
+    const res = await ElMessageBox.prompt(
+      '封禁后该骑手不能再接单，请填写封禁原因（可选，骑手端可见）。',
+      '封禁骑手',
+      {
+        confirmButtonText: '确认封禁',
+        cancelButtonText: '取消',
+        inputPlaceholder: '封禁原因',
+        inputValue: '',
+        inputValidator: () => true,
+        type: 'warning',
+      },
+    )
+    reason = res.value || ''
+  } catch {
+    return
+  }
+  try {
+    await updateRiderStatus(row.id, 0, reason)
+    row.status = 0
+    bannedState[row.id] = true
+    ElMessage.success('已封禁')
+  } catch {
+    // 错误提示由 axios 拦截器统一弹出
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -234,11 +294,21 @@ onMounted(load)
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="82">
+        <el-table-column label="操作" width="168" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="openAudit(row)">
-              {{ row.auditStatus === 0 ? '审核' : '查看' }}
-            </el-button>
+            <div class="row-actions">
+              <el-button link type="primary" size="small" @click="openAudit(row)">
+                {{ row.auditStatus === 0 ? '审核' : '查看' }}
+              </el-button>
+              <el-button
+                link
+                :type="isBanned(row) ? 'success' : 'danger'"
+                size="small"
+                @click="handleBan(row)"
+              >
+                {{ isBanned(row) ? '解封' : '封禁' }}
+              </el-button>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
@@ -469,5 +539,16 @@ onMounted(load)
   padding: 8px 12px;
   font-size: 13px;
   margin-bottom: 12px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.row-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 </style>

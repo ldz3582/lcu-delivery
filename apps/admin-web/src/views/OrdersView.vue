@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { Refresh, Search } from '@element-plus/icons-vue'
-import { getOrders, type Order } from '@/api'
+import { ElMessage } from 'element-plus'
+import { Download, Refresh, Search } from '@element-plus/icons-vue'
+import { exportOrders, getOrders, type Order } from '@/api'
 import {
   ORDER_STATUS,
   ORDER_STATUS_OPTIONS,
@@ -10,6 +11,7 @@ import {
 } from '@/utils/format'
 
 const loading = ref(false)
+const exporting = ref(false)
 const list = ref<Order[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -62,6 +64,22 @@ function handleSizeChange(s: number) {
   load()
 }
 
+/** 按当前筛选条件导出 CSV（带 token，fetch/axios blob 下载） */
+async function handleExport() {
+  exporting.value = true
+  try {
+    await exportOrders({
+      status: query.status === '' ? undefined : query.status,
+      keyword: query.keyword.trim() || undefined,
+    })
+    ElMessage.success('CSV 已开始下载')
+  } catch {
+    // 错误提示由下载封装 / axios 拦截器统一弹出
+  } finally {
+    exporting.value = false
+  }
+}
+
 function statusMeta(row: Order) {
   return ORDER_STATUS[row.status] ?? { text: row.statusText || '未知', type: 'info' as const }
 }
@@ -74,7 +92,12 @@ onMounted(load)
     <div class="page-card">
       <div class="page-title">
         <h2>订单管理</h2>
-        <el-button :icon="Refresh" @click="load">刷新</el-button>
+        <div class="title-actions">
+          <el-button :icon="Download" :loading="exporting" @click="handleExport">
+            导出 CSV
+          </el-button>
+          <el-button :icon="Refresh" @click="load">刷新</el-button>
+        </div>
       </div>
 
       <div class="toolbar">
@@ -156,3 +179,11 @@ onMounted(load)
     </div>
   </div>
 </template>
+
+<style scoped>
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+</style>

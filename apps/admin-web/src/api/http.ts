@@ -82,4 +82,43 @@ export function put<T>(url: string, data?: unknown): Promise<T> {
   return http.put(url, data) as unknown as Promise<T>
 }
 
+export function del<T>(url: string, data?: unknown): Promise<T> {
+  return http.delete(url, { data }) as unknown as Promise<T>
+}
+
+/**
+ * 带 token 下载二进制文件（如订单导出 CSV）。
+ * 走 axios 实例以复用 Authorization 拦截器；后端出错时返回 JSON，这里解析后抛出。
+ */
+export async function download(
+  url: string,
+  params?: Record<string, unknown>,
+  fallbackName = 'download.csv',
+): Promise<void> {
+  const res = (await http.get(url, {
+    params,
+    responseType: 'blob',
+  })) as unknown as Blob
+  const isJson = res?.type?.includes('json')
+  if (isJson) {
+    const text = await res.text()
+    try {
+      const body = JSON.parse(text) as ApiResult
+      ElMessage.error(body.msg || '导出失败')
+      throw new Error(body.msg || '导出失败')
+    } catch (e) {
+      if (e instanceof Error && e.message) throw e
+      throw new Error('导出失败')
+    }
+  }
+  const objectUrl = URL.createObjectURL(res)
+  const a = document.createElement('a')
+  a.href = objectUrl
+  a.download = fallbackName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+}
+
 export default http
