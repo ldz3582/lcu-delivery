@@ -67,8 +67,6 @@ REDIS_PASSWORD="$(grep -E '^REDIS_PASSWORD=' .env | cut -d= -f2)" \
 ADMIN_INIT_PASSWORD="${ADMIN_INIT_PASSWORD:-Admin@123456}" \
 WX_USER_APPID="$(env_get WX_USER_APPID)" \
 WX_USER_SECRET="$(env_get WX_USER_SECRET)" \
-WX_WORK_APPID="$(env_get WX_WORK_APPID)" \
-WX_WORK_SECRET="$(env_get WX_WORK_SECRET)" \
 WXPAY_MCH_ID="$(env_get WXPAY_MCH_ID)" \
 WXPAY_MCH_SERIAL_NO="$(env_get WXPAY_MCH_SERIAL_NO)" \
 WXPAY_API_V3_KEY="$(env_get WXPAY_API_V3_KEY)" \
@@ -84,8 +82,7 @@ for i in $(seq 1 60); do
     echo ""
     echo "后端      http://127.0.0.1:8080"
     echo "管理后台  cd apps/admin-web && npm run dev   → http://127.0.0.1:5174"
-    echo "小程序    微信开发者工具导入 apps/user-uniapp/dist/build/mp-weixin"
-    echo "          微信开发者工具导入 apps/workbench-uniapp/dist/build/mp-weixin"
+    echo "小程序    微信开发者工具导入 apps/lcu-mobile/dist/build/mp-weixin"
     echo "管理员    admin / Admin@123456（仅当 admin_user 为空时自动创建）"
     exit 0
   fi

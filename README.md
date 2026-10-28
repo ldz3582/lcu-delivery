@@ -8,19 +8,17 @@
 lcu-delivery/
 ├── server/                 Spring Boot 3.5 + MyBatis-Plus 后端（JDK 21 目标字节码）
 ├── apps/
-│   ├── lcu-mobile/         ★ 统一小程序：用户/商家/骑手/管理员 四端合一（19 个页面）
-│   ├── user-uniapp/        [已废弃] 原用户端，已并入 lcu-mobile
-│   ├── workbench-uniapp/   [已废弃] 原商家/骑手工作台，已并入 lcu-mobile
-│   └── admin-web/          管理后台（Vue3 + Element Plus，11 个页面：+优惠券/售后仲裁/评价/消息日志）
+│   ├── lcu-mobile/         ★ 统一小程序：用户/商家/骑手 三端合一（27 个页面）
+│   └── admin-web/          管理后台（Vue3 + Element Plus，17 个页面）
 ├── ops/
 │   ├── docker-compose.yml  MySQL 8.4 + Redis 7.4 + MinIO
-│   ├── sql/                schema.sql（29 表）/ seed.sql（开关）/ demo.sql（演示数据）
+│   ├── sql/                schema.sql（建表）/ seed.sql（开关）/ demo.sql（演示数据）/ migration-*.sql（增量迁移）
 │   ├── dev.sh              一键启动
 │   └── smoke-test.sh       端到端冒烟测试
 ├── starter/                启动包：30 分钟拉起依赖服务 + 29 张表的独立最小版本
 ├── tools/docgen/           行动手册 docx 的生成脚本（python-docx）
 └── docs/
-    ├── API.md              接口清单（123 个，含评价/售后/券/订阅/收藏/商家资金/骑手派单/上传）
+    ├── API.md              接口清单（157 个，由脚本生成）
     ├── gen_api.py          从 Controller 注解生成接口文档
     ├── gen_entities.py     从字段定义生成实体/Mapper
     └── design/             设计方案.docx、开发行动手册.docx
@@ -169,22 +167,22 @@ cd ops
 ./smoke-test.sh          # 另开终端，跑完整链路（可选 ADMIN_PASSWORD=... 测后台）
 ```
 
-三个前端：
+两个前端：
 
 ```bash
 # 管理后台（已配好 /api 代理）
 cd apps/admin-web && npm install && npm run dev      # http://127.0.0.1:5174
 
 # 小程序：先构建，再用微信开发者工具导入 dist/build/mp-weixin
-cd apps/user-uniapp && npm install && npm run build:mp-weixin
-cd apps/workbench-uniapp && npm install && npm run build:mp-weixin
+cd apps/lcu-mobile && npm install && npm run build:mp-weixin
 ```
 
 小程序开发时用 `npm run dev:mp-weixin` 可热更新；导入目录选 `dist/dev/mp-weixin`。
 开发者工具里勾选「不校验合法域名」，因为本地接口是 `http://127.0.0.1:8080`。
 
-真机预览时手机访问不到 127.0.0.1：复制 `apps/user-uniapp/.env.example` 为 `.env`，
+真机预览时手机访问不到 127.0.0.1：复制 `apps/lcu-mobile/.env.example` 为 `.env`，
 把 `VITE_API_BASE` 改成电脑的局域网 IP（如 `http://192.168.1.10:8080`）后重新构建。
+H5 端不需要配 `VITE_API_BASE`：默认走同源相对路径，由静态服务器的 `/api` 代理转发。
 
 ## 演示账号（本地 mock 模式）
 

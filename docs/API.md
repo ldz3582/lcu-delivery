@@ -1,6 +1,6 @@
 # 接口清单
 
-共 123 个接口，前缀 `/api`，统一响应 `{code,msg,data}`，`code=0` 成功。
+共 169 个接口，前缀 `/api`，统一响应 `{code,msg,data}`，`code=0` 成功。
 鉴权：`Authorization: Bearer <token>`；未登录返回 401，越权返回 403。
 
 | 方法 | 路径 | 权限 | 模块 |
@@ -10,43 +10,77 @@
 | `POST` | `/api/addresses/parse` | 登录用户 | Address |
 | `DELETE` | `/api/addresses/{id}` | 登录用户 | Address |
 | `PUT` | `/api/addresses/{id}` | 登录用户 | Address |
+| `GET` | `/api/admin/accounts` | 管理员 | AdminAccounts |
+| `POST` | `/api/admin/accounts` | 管理员 | AdminAccounts |
+| `GET` | `/api/admin/accounts/roles` | 管理员 | AdminAccounts |
+| `PUT` | `/api/admin/accounts/{id}` | 管理员 | AdminAccounts |
 | `GET` | `/api/admin/after-sales` | 管理员 | AfterSale |
 | `GET` | `/api/admin/after-sales/{id}` | 管理员 | AfterSale |
 | `POST` | `/api/admin/after-sales/{id}/judge` | 管理员 | AfterSale |
+| `GET` | `/api/admin/announcements` | 管理员 | Announcement |
+| `POST` | `/api/admin/announcements` | 管理员 | Announcement |
+| `DELETE` | `/api/admin/announcements/{id}` | 管理员 | Announcement |
+| `PUT` | `/api/admin/announcements/{id}` | 管理员 | Announcement |
+| `PUT` | `/api/admin/announcements/{id}/status` | 管理员 | Announcement |
+| `GET` | `/api/admin/banners` | 管理员 | Banner |
+| `POST` | `/api/admin/banners` | 管理员 | Banner |
+| `DELETE` | `/api/admin/banners/{id}` | 管理员 | Banner |
+| `PUT` | `/api/admin/banners/{id}` | 管理员 | Banner |
+| `PUT` | `/api/admin/banners/{id}/status` | 管理员 | Banner |
 | `GET` | `/api/admin/configs` | 管理员 | Admin |
 | `PUT` | `/api/admin/configs` | 管理员 | Admin |
 | `GET` | `/api/admin/coupons` | 管理员 | AdminCoupon |
 | `POST` | `/api/admin/coupons` | 管理员 | AdminCoupon |
 | `PUT` | `/api/admin/coupons/{id}/status` | 管理员 | AdminCoupon |
+| `GET` | `/api/admin/feedbacks` | 管理员 | Feedback |
+| `POST` | `/api/admin/feedbacks/{id}/handle` | 管理员 | Feedback |
 | `GET` | `/api/admin/fence` | 管理员 | Admin |
 | `PUT` | `/api/admin/fence` | 管理员 | Admin |
+| `GET` | `/api/admin/finance/flows` | 管理员 | AdminStats |
+| `GET` | `/api/admin/finance/overview` | 管理员 | AdminStats |
 | `GET` | `/api/admin/incidents` | 管理员 | AdminIncident |
 | `POST` | `/api/admin/incidents/{id}/handle` | 管理员 | AdminIncident |
 | `POST` | `/api/admin/login` | 公开 | Admin |
 | `GET` | `/api/admin/notify-logs` | 管理员 | Notify |
 | `GET` | `/api/admin/orders` | 管理员 | Admin |
+| `GET` | `/api/admin/orders/export` | 管理员 | AdminStats |
 | `GET` | `/api/admin/overview` | 管理员 | Admin |
 | `GET` | `/api/admin/penalties` | 管理员 | AdminPenalty |
+| `POST` | `/api/admin/products/{id}/offline` | 管理员 | AdminOps |
 | `GET` | `/api/admin/reviews` | 管理员 | Review |
 | `PUT` | `/api/admin/reviews/{id}/status` | 管理员 | Review |
 | `GET` | `/api/admin/riders` | 管理员 | Admin |
 | `POST` | `/api/admin/riders/{id}/audit` | 管理员 | Admin |
+| `POST` | `/api/admin/riders/{id}/status` | 管理员 | AdminOps |
 | `POST` | `/api/admin/riders/{riderId}/penalty` | 管理员 | AdminPenalty |
 | `GET` | `/api/admin/settlements` | 管理员 | Admin |
 | `POST` | `/api/admin/settlements/{id}/settle` | 管理员 | Admin |
 | `GET` | `/api/admin/shops` | 管理员 | Admin |
+| `PUT` | `/api/admin/shops/{id}` | 管理员 | AdminOps |
 | `POST` | `/api/admin/shops/{id}/audit` | 管理员 | Admin |
+| `POST` | `/api/admin/shops/{id}/freeze` | 管理员 | AdminOps |
+| `GET` | `/api/admin/shops/{id}/orders` | 管理员 | AdminOps |
+| `POST` | `/api/admin/shops/{id}/penalty` | 管理员 | AdminOps |
+| `GET` | `/api/admin/shops/{id}/products` | 管理员 | AdminOps |
+| `GET` | `/api/admin/shops/{id}/revenue` | 管理员 | AdminOps |
+| `GET` | `/api/admin/stats/ranking` | 管理员 | AdminStats |
+| `GET` | `/api/admin/stats/rates` | 管理员 | AdminStats |
+| `GET` | `/api/admin/stats/trend` | 管理员 | AdminStats |
 | `GET` | `/api/admin/users` | 管理员 | Admin |
+| `POST` | `/api/admin/users/{id}/ban` | 管理员 | AdminOps |
+| `GET` | `/api/admin/users/{id}/orders` | 管理员 | AdminOps |
 | `GET` | `/api/admin/withdrawals` | 管理员 | AdminWithdraw |
 | `POST` | `/api/admin/withdrawals/{id}/audit` | 管理员 | AdminWithdraw |
 | `POST` | `/api/after-sales` | 登录用户 | AfterSale |
 | `GET` | `/api/after-sales/mine` | 登录用户 | AfterSale |
 | `GET` | `/api/after-sales/{id}` | 登录用户 | AfterSale |
 | `POST` | `/api/after-sales/{id}/cancel` | 登录用户 | AfterSale |
+| `GET` | `/api/announcements` | 登录用户 | Announcement |
 | `POST` | `/api/auth/login` | 公开 | Auth |
 | `GET` | `/api/auth/mock-accounts` | 公开 | Auth |
 | `POST` | `/api/auth/mock-login` | 公开 | Auth |
 | `POST` | `/api/auth/stu-login` | 公开 | Auth |
+| `GET` | `/api/banners` | 登录用户 | Banner |
 | `POST` | `/api/cart/calculate` | 登录用户 | Cart |
 | `GET` | `/api/categories` | 公开 | Shop |
 | `GET` | `/api/coupons/available` | 登录用户 | Coupon |
@@ -56,6 +90,8 @@
 | `GET` | `/api/favorites/check` | 登录用户 | Favorite |
 | `DELETE` | `/api/favorites/{shopId}` | 登录用户 | Favorite |
 | `POST` | `/api/favorites/{shopId}/toggle` | 登录用户 | Favorite |
+| `POST` | `/api/feedback` | 登录用户 | Feedback |
+| `GET` | `/api/feedback/mine` | 登录用户 | Feedback |
 | `GET` | `/api/fence` | 公开 | Fence |
 | `GET` | `/api/identity/config` | 公开 | Identity |
 | `GET` | `/api/identity/status` | 登录用户 | Identity |
@@ -63,10 +99,15 @@
 | `GET` | `/api/merchant/after-sales` | 商家 | AfterSale |
 | `POST` | `/api/merchant/after-sales/{id}/handle` | 商家 | AfterSale |
 | `POST` | `/api/merchant/apply` | 商家 | Merchant |
+| `GET` | `/api/merchant/categories` | 商家 | Merchant |
+| `POST` | `/api/merchant/categories` | 商家 | Merchant |
+| `DELETE` | `/api/merchant/categories/{id}` | 商家 | Merchant |
+| `PUT` | `/api/merchant/categories/{id}` | 商家 | Merchant |
 | `GET` | `/api/merchant/coupons` | 商家 | MerchantCoupon |
 | `POST` | `/api/merchant/coupons` | 商家 | MerchantCoupon |
 | `PUT` | `/api/merchant/coupons/{id}/status` | 商家 | MerchantCoupon |
 | `GET` | `/api/merchant/orders` | 商家 | Merchant |
+| `GET` | `/api/merchant/orders/{id}` | 商家 | Merchant |
 | `POST` | `/api/merchant/orders/{id}/accept` | 商家 | Merchant |
 | `POST` | `/api/merchant/orders/{id}/ready` | 商家 | Merchant |
 | `POST` | `/api/merchant/orders/{id}/reject` | 商家 | Merchant |
@@ -75,6 +116,7 @@
 | `PUT` | `/api/merchant/products/{id}` | 商家 | Merchant |
 | `GET` | `/api/merchant/products/{id}/skus` | 商家 | Merchant |
 | `POST` | `/api/merchant/products/{id}/skus` | 商家 | Merchant |
+| `GET` | `/api/merchant/reviews` | 商家 | Review |
 | `POST` | `/api/merchant/reviews/{id}/reply` | 商家 | Review |
 | `GET` | `/api/merchant/shop` | 商家 | Merchant |
 | `PUT` | `/api/merchant/shop` | 商家 | Merchant |
@@ -82,6 +124,7 @@
 | `PUT` | `/api/merchant/skus/{skuId}` | 商家 | Merchant |
 | `GET` | `/api/merchant/statements` | 商家 | MerchantFinance |
 | `GET` | `/api/merchant/status` | 商家 | Merchant |
+| `GET` | `/api/merchant/stock-alerts` | 商家 | Merchant |
 | `GET` | `/api/merchant/summary` | 商家 | MerchantFinance |
 | `GET` | `/api/merchant/wallet` | 商家 | MerchantFinance |
 | `GET` | `/api/merchant/withdrawals` | 商家 | MerchantFinance |
@@ -107,6 +150,7 @@
 | `GET` | `/api/rider/incidents` | 骑手 | Delivery |
 | `POST` | `/api/rider/location` | 骑手 | Delivery |
 | `GET` | `/api/rider/orders` | 骑手 | Delivery |
+| `POST` | `/api/rider/orders/{id}/cancel` | 骑手 | Delivery |
 | `POST` | `/api/rider/orders/{id}/deliver` | 骑手 | Delivery |
 | `POST` | `/api/rider/orders/{id}/grab` | 骑手 | Delivery |
 | `POST` | `/api/rider/orders/{id}/incident` | 骑手 | Delivery |
@@ -114,6 +158,7 @@
 | `GET` | `/api/rider/penalties` | 骑手 | RiderFinance |
 | `GET` | `/api/rider/pool` | 骑手 | Delivery |
 | `GET` | `/api/rider/profile` | 骑手 | Delivery |
+| `PUT` | `/api/rider/settings` | 骑手 | Delivery |
 | `GET` | `/api/rider/settlements` | 骑手 | RiderFinance |
 | `GET` | `/api/rider/status` | 骑手 | Delivery |
 | `GET` | `/api/rider/summary` | 骑手 | RiderFinance |
@@ -124,6 +169,7 @@
 | `GET` | `/api/shops/{id}` | 公开 | Shop |
 | `GET` | `/api/shops/{id}/products` | 公开 | Shop |
 | `GET` | `/api/shops/{shopId}/reviews` | 公开 | Review |
+| `GET` | `/api/specials` | 登录用户 | Shop |
 | `POST` | `/api/upload` | 登录用户 | Upload |
 | `POST` | `/api/user/phone` | 登录用户 | User |
 | `GET` | `/api/user/profile` | 登录用户 | User |

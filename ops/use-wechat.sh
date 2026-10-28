@@ -45,8 +45,7 @@ import sys, pathlib
 env, appid, secret = sys.argv[1:4]
 p = pathlib.Path(env)
 lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
-kv = {"WX_USER_APPID": appid, "WX_USER_SECRET": secret,
-      "WX_WORK_APPID": appid, "WX_WORK_SECRET": secret}
+kv = {"WX_USER_APPID": appid, "WX_USER_SECRET": secret}
 out, seen = [], set()
 for line in lines:
     k = line.split("=", 1)[0].strip()
