@@ -153,19 +153,8 @@ CREATE TABLE IF NOT EXISTS `product_sku` (
   KEY `idx_product` (`product_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品规格';
 
-CREATE TABLE IF NOT EXISTS `cart_item` (
-  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `user_id`    BIGINT UNSIGNED NOT NULL,
-  `shop_id`    BIGINT UNSIGNED NOT NULL,
-  `product_id` BIGINT UNSIGNED NOT NULL,
-  `sku_id`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 表示无规格',
-  `qty`        INT NOT NULL DEFAULT 1,
-  `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_sku` (`user_id`,`product_id`,`sku_id`),
-  KEY `idx_shop` (`shop_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='购物车';
+-- 注：购物车是纯客户端状态（uni-app storage + /api/cart/calculate 服务端算价），
+-- 不再保留 cart_item 表。
 
 -- ---------- 5. 订单 ----------
 CREATE TABLE IF NOT EXISTS `orders` (

@@ -181,3 +181,19 @@ UPDATE `shop` s
 SET s.`owner_user_id` = u.`id`
 WHERE s.`id` BETWEEN 1 AND 11;
 
+
+-- ---------- 首页 Banner（运营位示例） ----------
+INSERT INTO `banner` (`title`,`image`,`link_type`,`link_value`,`sort`,`status`,`start_at`,`end_at`,`created_at`) VALUES
+  ('开学季 · 全场满30减8','/uploads/2026/10/demo-banner-1.jpg',3,NULL,1,1,NULL,NULL,NOW()),
+  ('一食堂黄焖鸡 · 限时特价','/uploads/2026/10/demo-banner-1.jpg',2,'1',2,1,NULL,NULL,NOW())
+ON DUPLICATE KEY UPDATE `title` = VALUES(`title`);
+
+-- ---------- 限时特价（示例：黄焖鸡大份 7.7 折、香锅套餐A 7.6 折） ----------
+UPDATE `product` SET `special_price` = 1390,
+  `special_start_at` = DATE_SUB(NOW(), INTERVAL 1 HOUR),
+  `special_end_at`   = DATE_ADD(NOW(), INTERVAL 3 DAY)
+ WHERE `id` = 2;
+UPDATE `product` SET `special_price` = 1680,
+  `special_start_at` = DATE_SUB(NOW(), INTERVAL 1 HOUR),
+  `special_end_at`   = DATE_ADD(NOW(), INTERVAL 3 DAY)
+ WHERE `id` = 106;
