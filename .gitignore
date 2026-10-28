@@ -12,3 +12,6 @@ __pycache__/
 *.pyc
 starter/data/
 starter/certs/
+
+# 本地运行目录：数据库数据、Maven 仓库、npm 缓存、截图、临时脚本等（约 1.3GB）
+.local/
