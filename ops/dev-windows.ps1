@@ -39,7 +39,16 @@ $ProjLink  = Join-Path $env:TEMP 'lcu-proj'   # -> $RepoRoot (ASCII path for jav
 $MysqlHome = Join-Path $EnvRoot 'mysql'
 $RedisHome = Join-Path $EnvRoot 'redis'
 $NodeHome  = Join-Path $EnvRoot 'node22'
-$JdkHome   = Join-Path $EnvRoot 'jdk'
+if ($env:WLB_JDK_HOME) {
+  $JdkHome = $env:WLB_JDK_HOME
+} elseif (Test-Path 'D:\develop\jdk\bin\java.exe') {
+  # 项目按 Java 21 编译，waimai-env 里的 jdk17 跑不了，默认用 D:\develop\jdk
+  $JdkHome = 'D:\develop\jdk'
+} elseif (Test-Path (Join-Path $EnvRoot 'jdk\bin\java.exe')) {
+  $JdkHome = Join-Path $EnvRoot 'jdk'
+} else {
+  $JdkHome = Join-Path $EnvRoot 'jdk17'
+}
 $MavenCmd  = Join-Path $EnvRoot 'maven\bin\mvn.cmd'
 
 # ---------- ports / accounts ----------
@@ -106,13 +115,26 @@ function Ensure-Junction([string]$Path, [string]$Target) {
   New-Item -ItemType Junction -Path $Path -Target $Target | Out-Null
 }
 
-# Write an ASCII .cmd launcher (one command per line) and start it detached
-# from the caller's process tree via WMI.
+# Write an ASCII .cmd launcher and start it through wscript.exe with a hidden
+# window (WScript.Shell.Run ..., 0, False). This gives the service its own
+# hidden console: closing the invoking terminal sends CTRL_CLOSE_EVENT only to
+# that terminal's console, so node/redis survive. Plain WMI + cmd.exe does NOT
+# protect them - their logs showed "^C" right before they died.
 function Start-Launcher([string]$Name, [string]$WorkDir, [string[]]$BodyLines) {
-  $launcher = Join-Path $RunDir "$Name.cmd"
-  Set-Content -Path $launcher -Value $BodyLines -Encoding ascii
+  # launchers must live on an ASCII path, otherwise a Chinese project path turns
+  # into "????" when written as ASCII and cmd.exe cannot find the file.
+  $runAscii = Join-Path $Link 'run'
+  if (-not (Test-Path $runAscii)) { New-Item -ItemType Directory -Force -Path $runAscii | Out-Null }
 
-  $cmdLine = 'cmd.exe /c ""' + $launcher + '""'
+  $launcher = Join-Path $runAscii "$Name.cmd"
+  $body = @('@echo off', ('cd /d "' + $WorkDir + '"')) + $BodyLines
+  Set-Content -Path $launcher -Value $body -Encoding ascii
+
+  $vbs = Join-Path $runAscii "$Name.vbs"
+  $vbsLine = 'CreateObject("WScript.Shell").Run "cmd /c ""' + $launcher + '""", 0, False'
+  Set-Content -Path $vbs -Value $vbsLine -Encoding ascii
+
+  $cmdLine = 'wscript.exe "' + $vbs + '"'
   $res = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
     CommandLine      = $cmdLine
     CurrentDirectory = $WorkDir
@@ -120,7 +142,7 @@ function Start-Launcher([string]$Name, [string]$WorkDir, [string[]]$BodyLines) {
   if ($res.ReturnValue -ne 0) {
     throw "failed to launch $Name (Win32_Process.Create returned $($res.ReturnValue))"
   }
-  Set-Content -Path (Join-Path $RunDir "$Name.pid") -Value $res.ProcessId -Encoding ascii
+  Set-Content -Path (Join-Path $runAscii "$Name.pid") -Value $res.ProcessId -Encoding ascii
   return $res.ProcessId
 }
 
@@ -159,6 +181,8 @@ function Invoke-Stop {
   Stop-Port $MysqlPort
   Start-Sleep -Seconds 2
   if (Test-Path $RunDir) { Remove-Item (Join-Path $RunDir '*.pid') -Force -ErrorAction SilentlyContinue }
+  $runAscii = Join-Path $Link 'run'
+  if (Test-Path $runAscii) { Remove-Item (Join-Path $runAscii '*.pid') -Force -ErrorAction SilentlyContinue }
   Write-Ok 'stopped (frontends, api, redis, mysql)'
 }
 
@@ -217,7 +241,7 @@ function Invoke-Start {
                   (Join-Path $Link 'logs\mysql.pid') + '" --skip-log-bin --bind-address=127.0.0.1 ' +
                   '--character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --default-time-zone=+08:00'
     $mysqlLine = '"' + $mysqld + '" ' + $mysqlFlags + ' >> "' + (Join-Path $Link 'logs\mysql.out.log') + '" 2>&1'
-    Start-Launcher 'mysql' $Link @('@echo off', $mysqlLine) | Out-Null
+    Start-Launcher 'mysql' $Link @($mysqlLine) | Out-Null
     if (-not (Wait-Port $MysqlPort 60)) { throw "MySQL did not start, see $Link\logs\mysql.out.log" }
     Write-Ok 'started'
   }
@@ -243,7 +267,7 @@ function Invoke-Start {
     }
     $redis = Join-Path $RedisHome 'redis-server.exe'
     $redisLine = '"' + $redis + '" "' + $conf + '" >> "' + (Join-Path $Link 'logs\redis.out.log') + '" 2>&1'
-    Start-Launcher 'redis' $Link @('@echo off', $redisLine) | Out-Null
+    Start-Launcher 'redis' $Link @($redisLine) | Out-Null
     if (-not (Wait-Port $RedisPort 30)) { throw "Redis did not start, see $Link\logs\redis.out.log" }
     Write-Ok 'started'
   }
@@ -263,7 +287,6 @@ function Invoke-Start {
              '?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true'
 
     $apiLines = @(
-      '@echo off',
       ('set "DB_URL=' + $dbUrl + '"'),
       ('set "DB_USERNAME=' + $DbUser + '"'),
       ('set "DB_PASSWORD=' + $DbPass + '"'),
@@ -315,7 +338,7 @@ function Invoke-Start {
     } else {
       $line = '"' + $nodeExe + '" "' + $serveJs + '" ' + $AdminPort + ' "' + $adminDist + '" ' + $apiBase +
               ' >> "' + (Join-Path $Link 'logs\admin.out.log') + '" 2>&1'
-      Start-Launcher 'admin' $ProjLink @('@echo off', $line) | Out-Null
+      Start-Launcher 'admin' $ProjLink @($line) | Out-Null
       if (-not (Wait-Http "http://127.0.0.1:$AdminPort/" 30)) { throw 'admin-web did not start' }
       Write-Ok 'serving'
     }
@@ -329,7 +352,7 @@ function Invoke-Start {
     } else {
       $line = '"' + $nodeExe + '" "' + $serveJs + '" ' + $H5Port + ' "' + $h5Dist + '" ' + $apiBase +
               ' >> "' + (Join-Path $Link 'logs\h5.out.log') + '" 2>&1'
-      Start-Launcher 'h5' $ProjLink @('@echo off', $line) | Out-Null
+      Start-Launcher 'h5' $ProjLink @($line) | Out-Null
       if (-not (Wait-Http "http://127.0.0.1:$H5Port/" 30)) { throw 'H5 did not start' }
       Write-Ok 'serving'
     }
