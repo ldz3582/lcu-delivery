@@ -170,13 +170,23 @@ cd ops
 ### Windows 一键启动（本机）
 
 用 Docker 不方便时，可以直接用 `ops/dev-windows.ps1` 起整套本地环境
-（MySQL 3307 / Redis 6380 / 后端 8082 / 管理端 5176 / H5 5175）：
+（MySQL 3307 / Redis 6380 / 后端 8082 / 管理端 5176 / H5 5175）。
+
+**推荐用根目录的 `dev.cmd`**（双击即可），它内部用 `-ExecutionPolicy Bypass` 调 PowerShell：
+
+```bat
+dev.cmd            :: 启动（双击等价）
+dev.cmd status     :: 看状态
+dev.cmd restart    :: 全量重启
+dev.cmd stop       :: 停止
+dev.cmd start -Build  :: 先 mvn package 再启动
+```
+
+> 这台机器实际强制 **AllSigned**，直接运行 `.ps1` 会报 `is not digitally signed`，
+> 所以必须经由 `dev.cmd`（批处理不受执行策略限制），或手动加 `-ExecutionPolicy Bypass`：
 
 ```powershell
-pwsh -File ops\dev-windows.ps1 status     # 看状态
-pwsh -File ops\dev-windows.ps1 start      # 起（只补缺的，幂等）
-pwsh -File ops\dev-windows.ps1 restart    # 全量重启
-pwsh -File ops\dev-windows.ps1 stop       # 停
+powershell -ExecutionPolicy Bypass -File ops\dev-windows.ps1 status
 ```
 
 说明：
