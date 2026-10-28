@@ -1,6 +1,7 @@
 <template>
   <view class="page">
-    <view class="card">
+    <!-- 后台开关 feature.address_parse 关闭时，整个「粘贴/解析」入口隐藏 -->
+    <view v-if="parseEnabled" class="card">
       <view class="label">粘贴地址文本（可选）</view>
       <textarea v-model="raw" class="textarea" placeholder="例如：东校区3号宿舍楼502 张三 13800001111" />
       <view class="between mt">
@@ -65,9 +66,24 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { api } from '../../api'
+import { api, identityApi } from '../../api'
 
 const campusNames = ['不选', '东校区', '西校区']
+
+/** 后台「地址文本解析」开关，默认展示；接口返回 addressParse === false 才隐藏 */
+const parseEnabled = ref(true)
+/** 是否从结算页进入的选地址流程：保存后把新地址写回 lcu_pick_address 并直接回购物车 */
+const picking = ref(false)
+
+async function loadFeatureSwitch() {
+  try {
+    const cfg = await identityApi.config()
+    parseEnabled.value = cfg?.addressParse !== false
+  } catch (e) {
+    // 开关接口异常时保留入口，避免误伤正常下单选地址
+    parseEnabled.value = true
+  }
+}
 
 // 东校区楼栋坐标表（全部落在后端围栏 POLYGON 内，已逐个校验 inFence=true）。
 // 校园场景下学生地址本来就是「几号楼几零几」，比 GPS 更准，也能绕开游客模式禁用定位的问题。
@@ -214,9 +230,18 @@ async function save() {
     lat: form.lat || null,
     isDefault: form.isDefault
   }
-  if (form.id) await api.updateAddress(form.id, payload)
-  else await api.createAddress(payload)
+  const saved: any = form.id
+    ? await api.updateAddress(form.id, payload)
+    : await api.createAddress(payload)
   uni.showToast({ title: '已保存' })
+  // 从结算页新增/编辑地址：写回选地址结果，并一次退回到购物车（cart → address/list → edit）
+  if (picking.value && saved?.id) {
+    uni.setStorageSync('lcu_pick_address', { ...payload, ...saved })
+    setTimeout(() => {
+      uni.navigateBack({ delta: 2, fail: () => uni.navigateBack() })
+    }, 500)
+    return
+  }
   setTimeout(() => uni.navigateBack(), 500)
 }
 
@@ -234,6 +259,8 @@ onShow(() => {
 })
 
 onLoad(async (q: any) => {
+  picking.value = q?.pick === '1'
+  loadFeatureSwitch()
   if (q?.id) {
     const list = await api.addresses()
     const a: any = list.find((x) => String(x.id) === String(q.id))

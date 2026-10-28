@@ -17,6 +17,8 @@
     { "path": "pages/review/edit", "style": { "navigationBarTitleText": "评价订单" } },
     { "path": "pages/after-sale/apply", "style": { "navigationBarTitleText": "申请售后" } },
     { "path": "pages/after-sale/list", "style": { "navigationBarTitleText": "我的售后", "enablePullDownRefresh": true } },
+    { "path": "pages/feedback/index", "style": { "navigationBarTitleText": "意见反馈" } },
+    { "path": "pages/announcement/index", "style": { "navigationBarTitleText": "平台公告", "enablePullDownRefresh": true } },
 
     { "path": "pages/merchant/apply", "style": { "navigationBarTitleText": "商家入驻" } },
     { "path": "pages/merchant/finance", "style": { "navigationBarTitleText": "资金与对账" } },

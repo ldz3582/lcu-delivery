@@ -45,10 +45,10 @@ function pickAddress(a: Address) {
 }
 
 function add() {
-  uni.navigateTo({ url: '/pages/address/edit' })
+  uni.navigateTo({ url: `/pages/address/edit${picking.value ? '?pick=1' : ''}` })
 }
 function edit(id: number) {
-  uni.navigateTo({ url: `/pages/address/edit?id=${id}` })
+  uni.navigateTo({ url: `/pages/address/edit?id=${id}${picking.value ? '&pick=1' : ''}` })
 }
 async function setDefault(a: Address) {
   await api.updateAddress(a.id, { ...a, isDefault: 1 })

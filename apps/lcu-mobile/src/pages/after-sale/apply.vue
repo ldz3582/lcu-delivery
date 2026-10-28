@@ -63,7 +63,7 @@
         </view>
         <view v-if="images.length < 3" class="img-add" @click="chooseImage">+</view>
       </view>
-      <view class="muted mt8">本地预览占位，暂未上传图片服务器</view>
+      <view class="muted mt8">图片会先上传到服务器，提交时只传图片地址；最多 3 张</view>
     </view>
 
     <view class="card note-card">
@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { afterSaleApi, api } from '../../api'
+import { afterSaleApi, api, uploadImage } from '../../api'
 import { guard } from '../../utils/auth'
 
 const TYPES = [
@@ -123,11 +123,24 @@ async function loadOrder() {
 
 function chooseImage() {
   uni.chooseImage({
-    count: Math.max(0, 3 - images.value.length),
+    count: Math.max(1, 3 - images.value.length),
     sizeType: ['compressed'],
-    success: (r: any) => {
+    success: async (r: any) => {
       const paths: string[] = r?.tempFilePaths || []
-      images.value = [...images.value, ...paths].slice(0, 3)
+      if (!paths.length) return
+      // 凭证必须真正上传：POST /api/upload（multipart field=file，带 Bearer token）
+      uni.showLoading({ title: '上传中…', mask: true })
+      try {
+        for (const path of paths) {
+          if (images.value.length >= 3) break
+          const res = await uploadImage(path)
+          if (res?.url) images.value = [...images.value, res.url].slice(0, 3)
+        }
+      } catch (e: any) {
+        toast(String(e?.message || '图片上传失败，请重试'))
+      } finally {
+        uni.hideLoading()
+      }
     }
   })
 }
@@ -181,7 +194,13 @@ async function submit() {
     })
     uni.showToast({ title: '已提交，等待商家处理', icon: 'none' })
     setTimeout(() => uni.redirectTo({ url: '/pages/after-sale/list' }), 800)
-  } catch (e) {
+  } catch (e: any) {
+    const msg = String(e?.message || '')
+    // 超出售后受理期：后端返回业务码 2000，msg 形如「订单已完成超过 3 天，超出售后受理期…」
+    // toast 会截断长文案，这里用 modal 把后端原文完整展示给用户
+    if (msg.includes('售后受理期')) {
+      uni.showModal({ title: '无法申请售后', content: msg, showCancel: false })
+    }
     // 重复申请/状态不符等，request 层已 toast 后端文案
     console.warn(e)
   } finally {

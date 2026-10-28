@@ -24,6 +24,7 @@
         </view>
 
         <view class="muted mt8">{{ o.orderNo }}</view>
+        <view v-if="remarkText(o)" class="remark mt8">备注：{{ remarkText(o) }}</view>
         <view class="addr mt8">{{ addressText(o.address) }}</view>
         <view v-if="o.deliveredAt" class="muted mt8">送达 {{ dt(o.deliveredAt) }}</view>
         <view v-else-if="o.pickedAt" class="muted mt8">取餐 {{ dt(o.pickedAt) }}</view>
@@ -37,6 +38,7 @@
           <text v-if="o.status === 40" class="op primary" @click="doDeliver(o)">
             {{ busyId === o.orderId ? '上传中…' : '送达（拍照）' }}
           </text>
+          <text v-if="o.status === 30" class="op warn" @click="cancelOrder(o)">取消配送</text>
           <text v-if="o.status === 30 || o.status === 40" class="op danger" @click="openIncident(o)">上报异常</text>
         </view>
       </view>
@@ -170,6 +172,21 @@ function dt(v?: string) {
   return v ? String(v).replace('T', ' ').slice(0, 16) : ''
 }
 
+/**
+ * 订单备注：优先用后端直接返回的 remark；
+ * 老接口未返回时从 address JSON 的 remark 兜底，两者都没有就返回空（页面不渲染）。
+ */
+function remarkText(o: RiderOrder) {
+  const direct = String(o?.remark || '').trim()
+  if (direct) return direct
+  try {
+    const a = JSON.parse(o?.address || '{}')
+    return String(a?.remark || '').trim()
+  } catch (e) {
+    return ''
+  }
+}
+
 /** 订单地址是 JSON 字符串：{campus, detail, building, floor, room, ...} */
 function addressText(s?: string) {
   try {
@@ -271,6 +288,28 @@ async function doPickup(o: RiderOrder) {
     console.warn(e)
   } finally {
     busyId.value = 0
+  }
+}
+
+/** 30 待取餐可取消配送，订单会退回抢单池；40 已取餐必须走异常上报表单 */
+async function cancelOrder(o: RiderOrder) {
+  const ok = await new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '取消配送',
+      content: '取消后这一单会退回抢单大厅，由其他骑手接单。确定取消吗？',
+      confirmText: '确认取消',
+      cancelText: '再想想',
+      success: (r) => resolve(!!r.confirm)
+    })
+  })
+  if (!ok) return
+  try {
+    await riderApi.cancel(o.orderId)
+    uni.showToast({ title: '已取消，订单已退回抢单大厅', icon: 'none' })
+    await load()
+  } catch (e) {
+    // 「已取餐不能直接取消」等由 request 层提示
+    console.warn(e)
   }
 }
 
@@ -407,6 +446,7 @@ onPullDownRefresh(async () => {
 }
 .op.primary { background: #c2410c; color: #fff; }
 .op.danger { background: #fef2f2; color: #b91c1c; }
+.op.warn { background: #fff7ed; color: #b45309; }
 
 .imgs { display: flex; flex-wrap: wrap; gap: 12rpx; }
 .img { width: 150rpx; height: 150rpx; border-radius: 12rpx; background: #f3f4f6; }

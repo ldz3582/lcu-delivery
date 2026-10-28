@@ -1,5 +1,7 @@
 // 统一请求封装：自动带 token，业务码非 0 抛错，401 清登录态并回登录页
-const BASE_URL = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8080'
+// VITE_API_BASE 不配置时走「同源相对路径」：H5 由 serve.mjs 把 /api 代理到后端，端口怎么变都不用重新打包；
+// 小程序（mp-weixin）没有代理，构建时必须显式传 VITE_API_BASE=http://127.0.0.1:8081
+const BASE_URL = (import.meta as any).env?.VITE_API_BASE || ''
 
 export interface ApiResp<T> {
   code: number
@@ -76,7 +78,10 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
             gotoLogin()
           }
           if (options.showError !== false) uni.showToast({ title: msg, icon: 'none' })
-          reject(new Error(msg))
+          // 把业务码挂到 Error 上：页面需要按 2001(超出围栏)/1001 等分支处理
+          const err: any = new Error(msg)
+          err.code = body?.code
+          reject(err)
         }
       },
       fail: (err: any) => {

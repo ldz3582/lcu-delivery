@@ -49,7 +49,7 @@
         </view>
         <view class="muted mt8">{{ addressText(o.address) }}</view>
         <view class="between mt8">
-          <text class="muted" v-if="o.distance">{{ o.distance }} m</text>
+          <text class="muted" v-if="distanceText(o.distance)">{{ distanceText(o.distance) }}</text>
           <text class="muted" v-else>距离未知</text>
           <view class="card-ops">
             <view v-if="o.shopLng && o.shopLat" class="btn small ghost" @click="navShop(o)">导航到店</view>
@@ -78,6 +78,10 @@ import AppTabBar from '../../components/AppTabBar.vue'
 const pool = ref<RiderPoolItem[]>([])
 const dispatched = ref<RiderDispatchedOrder[]>([])
 const profile = ref<any>(null)
+/** 骑手当前定位（gcj02），用于给 GET /api/rider/pool 传 lng/lat 换 distance */
+const myLoc = ref<{ lng: number; lat: number } | null>(null)
+let locating: Promise<{ lng: number; lat: number } | null> | null = null
+let locationRequested = false
 /** 每秒刷新一次，用于派单倒计时 */
 const now = ref(Date.now())
 let tickTimer: any = null
@@ -92,6 +96,48 @@ function addressText(s: string) {
     const a = JSON.parse(s || '{}')
     return `${a.campus === 1 ? '东区' : a.campus === 2 ? '西区' : ''} ${a.detail || ''}`
   } catch { return '' }
+}
+
+/** distance 单位米，后端传定位后才返回 */
+function distanceText(d?: number) {
+  if (typeof d !== 'number' || !Number.isFinite(d)) return ''
+  return d >= 1000 ? `距离 ${(d / 1000).toFixed(1)} km` : `距离 ${Math.round(d)} m`
+}
+
+/**
+ * 取一次定位：H5 可能无权限/非 https，失败返回 null 不报错。
+ * 4 秒超时兜底，避免定位弹窗一直不返回时卡住抢单大厅。
+ */
+function locate(): Promise<{ lng: number; lat: number } | null> {
+  if (locating) return locating
+  const task = new Promise<{ lng: number; lat: number } | null>((resolve) => {
+    let done = false
+    let timer: any = null
+    const finish = (p: { lng: number; lat: number } | null) => {
+      if (done) return
+      done = true
+      if (timer) clearTimeout(timer)
+      if (p) myLoc.value = p
+      resolve(p)
+    }
+    timer = setTimeout(() => finish(null), 4000)
+    try {
+      uni.getLocation({
+        type: 'gcj02',
+        success: (res: any) => {
+          const lng = Number(res?.longitude)
+          const lat = Number(res?.latitude)
+          finish(Number.isFinite(lng) && Number.isFinite(lat) ? { lng, lat } : null)
+        },
+        fail: () => finish(null)
+      })
+    } catch (e) {
+      finish(null)
+    }
+  })
+  locating = task
+  task.then(() => { locating = null })
+  return task
 }
 
 /** 派单倒计时：按 dispatchedAt + expireSeconds 本地计算 */
@@ -117,7 +163,18 @@ async function load() {
     console.warn(e)
   }
   try {
-    pool.value = await riderApi.pool()
+    if (myLoc.value) {
+      pool.value = await riderApi.pool(myLoc.value.lng, myLoc.value.lat)
+    } else {
+      // 先出无距离的结果，定位成功后再带坐标重查一次，避免定位弹窗阻塞抢单列表
+      pool.value = await riderApi.pool()
+      if (!locationRequested) {
+        locationRequested = true
+        locate().then((p) => {
+          if (p) load()
+        })
+      }
+    }
   } catch (e) {
     pool.value = []
   }
@@ -203,23 +260,14 @@ function navShop(o: RiderPoolItem) {
 }
 
 /** 取一次定位并上报；定位失败静默跳过，避免 toast 刷屏 */
-function reportLocationOnce() {
-  uni.getLocation({
-    type: 'gcj02',
-    success: async (res: any) => {
-      const lng = Number(res?.longitude)
-      const lat = Number(res?.latitude)
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
-      try {
-        await riderApi.location(lng, lat)
-      } catch (e) {
-        // 静默：上报失败不影响接单
-      }
-    },
-    fail: () => {
-      // 用户没开定位/模拟器不支持：跳过这一轮
-    }
-  })
+async function reportLocationOnce() {
+  const p = await locate()
+  if (!p) return
+  try {
+    await riderApi.location(p.lng, p.lat)
+  } catch (e) {
+    // 静默：上报失败不影响接单
+  }
 }
 
 function startTracking() {

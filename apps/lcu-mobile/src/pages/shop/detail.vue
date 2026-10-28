@@ -9,6 +9,27 @@
       </view>
       <view class="muted">{{ shop.address }}</view>
       <view class="muted">起送 {{ fen(shop.minAmount) }} · 配送 {{ fen(shop.deliveryFee) }} · 营业 {{ shop.openTime }}</view>
+      <view v-if="shop.deliveryRangeMeters" class="muted">配送范围 约 {{ rangeText(shop.deliveryRangeMeters) }}</view>
+      <view v-if="shop.notice" class="notice">📢 {{ shop.notice }}</view>
+    </view>
+
+    <!-- 本店优惠：GET /api/shops/{id} 的 coupons（本店券 + 全场券），空数组时整块隐藏 -->
+    <view v-if="coupons.length" class="coupon-sec">
+      <view class="coupon-head">
+        <text class="coupon-title">本店优惠</text>
+        <text class="muted">点击领取</text>
+      </view>
+      <scroll-view class="coupon-scroll" scroll-x>
+        <view
+          v-for="c in coupons"
+          :key="c.id"
+          :class="['shop-coupon', c.claimed ? 'claimed' : '']"
+          @click="claim(c)"
+        >
+          <text class="coupon-label">{{ c.label || c.name }}</text>
+          <text class="coupon-state">{{ c.claimed ? '已领取' : (claimingId === c.id ? '领取中…' : '领取') }}</text>
+        </view>
+      </scroll-view>
     </view>
 
     <view class="products">
@@ -39,11 +60,16 @@
 
           <view class="between price-row">
             <view class="price-group">
-              <text class="price">{{ fen(p.price) }}</text>
-              <text v-if="showOrigin(p)" class="origin">{{ fen(p.originPrice) }}</text>
+              <text v-if="p.specialActive" class="special-tag">限时特价</text>
+              <text class="price">{{ fen(priceOf(p)) }}</text>
+              <text v-if="p.specialActive" class="origin">{{ fen(p.price) }}</text>
+              <text v-else-if="showOrigin(p)" class="origin">{{ fen(p.originPrice) }}</text>
               <text v-if="p.hasSku === 1" class="from">起</text>
             </view>
             <view class="add" @click="onAdd(p)">+</view>
+          </view>
+          <view v-if="p.specialActive && specialTimeText(p)" class="special-time">
+            {{ specialTimeText(p) }}
           </view>
         </view>
       </view>
@@ -84,15 +110,18 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { api, favoriteApi, type Product, type ProductSku, type ShopDetail } from '../../api'
+import { api, couponApi, favoriteApi, type Product, type ProductSku, type ShopCoupon, type ShopDetail } from '../../api'
 import { useCartStore } from '../../stores/cart'
 
 const shop = ref<ShopDetail | null>(null)
 const cart = useCartStore()
 const favorited = ref(false)
 const favBusy = ref(false)
+/** 本店可领券；shop.coupons 为空时模板整块隐藏 */
+const coupons = computed(() => shop.value?.coupons || [])
+const claimingId = ref(0)
 /** 正在选规格的商品 */
 const skuProduct = ref<Product | null>(null)
 /** 套餐组成展开状态 */
@@ -104,12 +133,35 @@ function fen(v?: number | null) {
   return (Number(v || 0) / 100).toFixed(2) + ' 元'
 }
 
+/** deliveryRangeMeters 单位为米，空值不展示 */
+function rangeText(m: number) {
+  const n = Number(m)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  return n >= 1000 ? `${(n / 1000).toFixed(1)} km` : `${Math.round(n)} m`
+}
+
 function isCombo(p: Product) {
   return Array.isArray(p.comboItems) && p.comboItems.length > 0
 }
 
 function showOrigin(p: Product) {
   return typeof p.originPrice === 'number' && p.originPrice > p.price
+}
+
+/** 特价生效时成交价用 priceNow（缺字段时退回 price），加购也只传 productId，最终价由后端算 */
+function priceOf(p: Product) {
+  if (p.specialActive && typeof p.priceNow === 'number' && p.priceNow > 0) return p.priceNow
+  return p.price
+}
+
+/** 特价截止时间：ISO '2026-10-25T18:00:00' → '特价至 10-25 18:00' */
+function specialTimeText(p: Product) {
+  const raw = p.specialEndAt
+  if (!raw) return ''
+  const s = String(raw)
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/)
+  if (m) return `特价至 ${m[2]}-${m[3]} ${m[4]}:${m[5]}`
+  return ''
 }
 
 function toggleCombo(id: number) {
@@ -134,6 +186,27 @@ async function loadFavorite() {
     favorited.value = !!r?.favorited
   } catch (e) {
     favorited.value = false
+  }
+}
+
+/** 领券：POST /api/coupons/{id}/claim；claimed 置 true 后按钮不可再点 */
+async function claim(c: ShopCoupon) {
+  if (c.claimed || claimingId.value) return
+  claimingId.value = c.id
+  try {
+    await couponApi.claim(c.id)
+    c.claimed = true
+    uni.showToast({ title: '领取成功', icon: 'none' })
+  } catch (e: any) {
+    const msg = String(e?.message || '')
+    if (msg.includes('领过') || msg.includes('已领')) {
+      c.claimed = true
+      uni.showToast({ title: '这张券已经领过了', icon: 'none' })
+    } else {
+      uni.showToast({ title: msg || '领取失败，请稍后重试', icon: 'none' })
+    }
+  } finally {
+    claimingId.value = 0
   }
 }
 
@@ -172,7 +245,13 @@ function onAdd(p: Product) {
     skuProduct.value = p
     return
   }
-  cart.add(shop.value.id, shop.value.name, p)
+  cart.add(shop.value.id, shop.value.name, {
+    id: p.id,
+    name: p.name,
+    image: p.image,
+    // 展示价用当前成交价（特价生效即 priceNow），提交后仍以 /api/cart/calculate 为准
+    price: priceOf(p)
+  })
   uni.showToast({ title: '已加入购物车', icon: 'none' })
 }
 
@@ -201,12 +280,31 @@ function toCart() {
 .page { padding-bottom: 140rpx; }
 .head { background: #fff; padding: 28rpx; }
 .title { font-size: 38rpx; font-weight: 700; margin-bottom: 10rpx; flex: 1; }
+.notice {
+  margin-top: 16rpx; padding: 16rpx 20rpx;
+  background: #fff7ed; border: 1rpx solid #fed7aa; border-radius: 12rpx;
+  color: #9a3412; font-size: 24rpx; line-height: 1.6;
+}
 .fav {
   flex-shrink: 0; margin-left: 20rpx;
   font-size: 24rpx; color: #c2410c; background: #fdf2ea;
   border: 1rpx solid #f0b79c; border-radius: 30rpx; padding: 10rpx 22rpx;
 }
 .fav.on { background: #c2410c; color: #fff; border-color: #c2410c; }
+.coupon-sec { background: #fff; padding: 18rpx 24rpx 20rpx; border-top: 1rpx solid #f3f4f6; }
+.coupon-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12rpx; }
+.coupon-title { font-size: 28rpx; font-weight: 600; color: #c2410c; }
+.coupon-scroll { white-space: nowrap; }
+.shop-coupon {
+  display: inline-flex; align-items: center; gap: 14rpx;
+  margin-right: 16rpx; padding: 14rpx 22rpx;
+  background: #fff7ed; border: 1rpx dashed #f0b79c; border-radius: 12rpx;
+}
+.shop-coupon.claimed { background: #f5f6f8; border-color: #e5e7eb; opacity: 0.7; }
+.coupon-label { font-size: 24rpx; color: #c2410c; font-weight: 600; }
+.shop-coupon.claimed .coupon-label { color: #9ca3af; }
+.coupon-state { font-size: 20rpx; color: #fff; background: #c2410c; border-radius: 20rpx; padding: 4rpx 14rpx; }
+.shop-coupon.claimed .coupon-state { background: #d1d5db; color: #6b7280; }
 .products { padding: 20rpx; }
 .item { display: flex; }
 .thumb {
@@ -232,6 +330,11 @@ function toCart() {
 .price { color: #c2410c; font-weight: 600; font-size: 30rpx; }
 .origin { color: #9ca3af; font-size: 22rpx; text-decoration: line-through; }
 .from { color: #9ca3af; font-size: 20rpx; }
+.special-tag {
+  font-size: 20rpx; color: #fff; background: #dc2626;
+  border-radius: 6rpx; padding: 2rpx 10rpx;
+}
+.special-time { margin-top: 6rpx; font-size: 20rpx; color: #dc2626; }
 .add {
   width: 52rpx; height: 52rpx; border-radius: 50%; background: #c2410c; color: #fff;
   display: flex; align-items: center; justify-content: center; font-size: 34rpx;

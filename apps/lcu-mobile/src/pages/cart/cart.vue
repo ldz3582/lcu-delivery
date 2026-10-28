@@ -108,6 +108,8 @@ const bill = ref<Bill | null>(null)
 const address = ref<Address | null>(null)
 const remark = ref('')
 const submitting = ref(false)
+/** 下单幂等键：一次结算内复用，成功后清空（防双击建两单） */
+let clientToken: string | null = null
 
 const coupon = ref<MyCoupon | null>(null)
 const couponList = ref<MyCoupon[]>([])
@@ -247,6 +249,13 @@ function goCouponCenter() {
 }
 
 async function loadAddress() {
+  // 地址列表页选中/新增后写入 lcu_pick_address，这里优先消费并清除，避免下次进入串地址
+  const picked = uni.getStorageSync('lcu_pick_address')
+  if (picked && picked.id) {
+    uni.removeStorageSync('lcu_pick_address')
+    address.value = picked as Address
+    return
+  }
   const list = await api.addresses()
   address.value = list.find((a) => a.isDefault === 1) || list[0] || null
 }
@@ -273,14 +282,21 @@ async function submit() {
     } catch (e) {
       console.warn(e)
     }
+    // 幂等键：同一次结算只生成一次，连点/超时重试都只会建一单
+    if (!clientToken) {
+      clientToken = `ct_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    }
     const order = await api.createOrder({
       shopId: cart.shopId,
       addressId: address.value.id,
       items: cartItems(),
       remark: remark.value,
-      userCouponId: coupon.value?.userCouponId ?? null
+      userCouponId: coupon.value?.userCouponId ?? null,
+      clientToken
     })
     cart.clear()
+    // 下单成功，幂等键作废，下次结算重新生成
+    clientToken = null
     const prepay = await api.prepay(order.orderId)
     if (prepay.mock) {
       const r = await new Promise<boolean>((resolve) => {
@@ -295,6 +311,16 @@ async function submit() {
     uni.redirectTo({ url: `/pages/order/detail?id=${order.orderId}` })
   } catch (e: any) {
     console.warn(e)
+    // 围栏拦截（后端 ErrorCode.OUT_OF_FENCE=2001）：必须用弹窗明确告知，不能只靠 toast
+    if (e?.code === 2001) {
+      uni.showModal({
+        title: '超出校园配送范围',
+        content: '当前收货地址不在聊大校园配送范围内，暂不支持下单。请重新选择校内的收货地址后再提交。',
+        showCancel: false,
+        confirmText: '我知道了'
+      })
+      return
+    }
     // 下单被券拦下（门槛变化/券已用）：解绑并按最新金额重算
     if (String(e?.message || '').includes('券')) {
       coupon.value = null

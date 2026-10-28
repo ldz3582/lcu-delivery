@@ -6,6 +6,16 @@
       <view v-if="etaText" class="eta">{{ etaText }}</view>
     </view>
 
+    <!-- 商家信息：GET /api/orders/{id} 已返回 shopName / shopPhone -->
+    <view v-if="order.shopName || order.shopPhone" class="card">
+      <view class="between">
+        <text class="sec">商家</text>
+        <text v-if="order.shopPhone" class="call" @click="callShop">📞 联系商家</text>
+      </view>
+      <view class="shop-name mt8">{{ order.shopName || '店铺' }}</view>
+      <view v-if="order.shopPhone" class="muted mt8" @click="callShop">电话 {{ maskPhone(order.shopPhone) }}</view>
+    </view>
+
     <!-- 配送进度时间轴（track 接口未就绪时整块不渲染，保持原样式） -->
     <view v-if="steps.length" class="card">
       <view class="between">
@@ -103,11 +113,15 @@
         <text>实付</text>
         <text class="price">{{ (order.payAmount / 100).toFixed(2) }} 元</text>
       </view>
+      <view v-if="penaltyAmount > 0" class="between mt8">
+        <text class="muted">违约金</text>
+        <text class="penalty">已扣违约金 ¥{{ (penaltyAmount / 100).toFixed(2) }}</text>
+      </view>
     </view>
 
     <view class="actions">
       <view v-if="order.status === 0" class="btn-primary" @click="pay">去支付</view>
-      <view v-if="order.status === 0 || order.status === 10" class="btn-ghost mt12" @click="cancel">取消订单</view>
+      <view v-if="canCancel" class="btn-ghost mt12" @click="cancel">取消订单</view>
       <view v-if="order.status === 40" class="btn-primary" @click="confirm">确认收货</view>
 
       <view v-if="order.status === 50" class="row-btns">
@@ -155,6 +169,12 @@ const currentStatus = computed<number>(() => {
 
 const statusText = computed(() => track.value?.statusText || order.value?.statusText || '')
 
+/** 商家违约金（分），接口返回 penaltyAmount，>0 才展示 */
+const penaltyAmount = computed(() => Number(order.value?.penaltyAmount || 0))
+
+/** 0 待支付 / 10 待接单 / 20 待出餐 / 30 待取餐 可取消；后者会扣违约金 */
+const canCancel = computed(() => [0, 10, 20, 30].includes(Number(order.value?.status)))
+
 const isDelivering = computed(() => currentStatus.value === 30 || currentStatus.value === 40)
 
 const etaText = computed(() => {
@@ -201,6 +221,20 @@ function callRider() {
   }
   // H5/部分端不支持拨号，失败不打扰用户
   uni.makePhoneCall({ phoneNumber: digits, fail: () => {} })
+}
+
+function callShop() {
+  const phone = String(order.value?.shopPhone || '')
+  const digits = phone.replace(/\D/g, '')
+  // 后端可能返回脱敏号码（含 *），脱敏后位数不足时不拨号
+  if (digits.length < 7) {
+    uni.showToast({ title: '暂无商家联系电话', icon: 'none' })
+    return
+  }
+  uni.makePhoneCall({
+    phoneNumber: digits,
+    fail: () => uni.showToast({ title: '当前环境不支持拨号', icon: 'none' })
+  })
 }
 
 // ---------------- 地图 ----------------
@@ -348,12 +382,29 @@ async function pay() {
 }
 
 async function cancel() {
+  const status = Number(order.value?.status)
+  // 20/30 商家已接单：后端按 order.cancel_penalty_rate（默认 20%）扣违约金，剩余原路退回
+  const risky = status === 20 || status === 30
+  const pay = Number(order.value?.payAmount || 0)
+  const penalty = ((pay * 0.2) / 100).toFixed(2)
+  const content = risky
+    ? `商家已接单，取消将扣除违约金（约实付的 20%，约 ¥${penalty}），剩余原路退回。确定取消吗？`
+    : '确认取消这一单吗？'
   const r = await new Promise<boolean>((resolve) => {
-    uni.showModal({ title: '取消订单', content: '确认取消这一单吗？', success: (x) => resolve(x.confirm) })
+    uni.showModal({
+      title: risky ? '取消订单（将扣违约金）' : '取消订单',
+      content,
+      success: (x) => resolve(!!x.confirm)
+    })
   })
-  if (r) {
-    await api.cancelOrder(orderId, '用户取消')
+  if (!r) return
+  try {
+    await api.cancelOrder(orderId, risky ? '用户取消（商家已接单，同意扣违约金）' : '用户取消')
+    uni.showToast({ title: risky ? '已取消，违约金已扣除' : '已取消', icon: 'none' })
     load()
+  } catch (e) {
+    // 「配送中/已完成不能取消」等由 request 层提示
+    console.warn(e)
   }
 }
 
@@ -461,6 +512,8 @@ onPullDownRefresh(async () => {
 .rinfo { flex: 1; margin-left: 18rpx; }
 .rname { font-size: 28rpx; font-weight: 600; }
 .call { font-size: 24rpx; color: #c2410c; border: 1rpx solid #f0b79c; background: #fdf2ea; border-radius: 999rpx; padding: 10rpx 20rpx; }
+.shop-name { font-size: 30rpx; font-weight: 600; }
+.penalty { color: #b91c1c; font-size: 24rpx; }
 
 /* 地图 */
 .map { width: 100%; height: 380rpx; border-radius: 16rpx; overflow: hidden; }

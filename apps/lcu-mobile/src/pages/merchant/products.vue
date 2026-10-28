@@ -7,6 +7,22 @@
       </view>
     </view>
 
+    <!-- 库存预警：GET /api/merchant/stock-alerts?threshold=5 -->
+    <view v-if="stockAlerts.length" class="card alert-card">
+      <view class="between">
+        <text class="alert-title">⚠️ 库存预警</text>
+        <text class="muted">{{ stockAlerts.length }} 项</text>
+      </view>
+      <view v-for="a in stockAlerts" :key="a.productId" class="alert-row">
+        <text class="alert-name">{{ a.name }}</text>
+        <text :class="['alert-stock', a.soldOut ? 'out' : 'low']">
+          {{ a.soldOut ? '库存 0' : '仅剩 ' + a.stock }}
+        </text>
+        <text class="muted alert-status">{{ a.statusText }}</text>
+      </view>
+      <view class="alert-tip">库存为 0 的菜品售罄已自动下架，补货后请手动重新上架。</view>
+    </view>
+
     <!-- 表单：新增 / 编辑 -->
     <view v-if="formVisible" class="card">
       <view class="between">
@@ -25,6 +41,47 @@
       <view class="field">
         <text>划线原价（元）</text>
         <input v-model="form.originPriceYuan" type="digit" placeholder="特价时填，留空不显示" />
+      </view>
+
+      <!-- 限时特价：specialPrice 单位分，specialStartAt/specialEndAt 传 ISO 字符串 -->
+      <view class="special-box">
+        <view class="between">
+          <text class="special-title">⚡ 限时特价</text>
+          <text v-if="editingId && hasSpecialSaved" class="special-clear" @click="clearSpecial">清除特价</text>
+        </view>
+        <view class="muted special-tip">留空表示不设特价；特价必须低于现价，生效时段内按特价结算</view>
+        <view class="field">
+          <text>特价（元）</text>
+          <input v-model="form.specialYuan" type="digit" placeholder="9.90" />
+        </view>
+        <view class="special-row">
+          <picker class="sp-picker" mode="date" :value="form.specialStartDate" @change="onSpecialDate('specialStartDate', $event)">
+            <view class="field">
+              <text>开始</text>
+              <text class="picker-value">{{ form.specialStartDate || '选日期' }}</text>
+            </view>
+          </picker>
+          <picker class="sp-picker" mode="time" :value="form.specialStartTime" @change="onSpecialTime('specialStartTime', $event)">
+            <view class="field">
+              <text>时间</text>
+              <text class="picker-value">{{ form.specialStartTime || '选时间' }}</text>
+            </view>
+          </picker>
+        </view>
+        <view class="special-row">
+          <picker class="sp-picker" mode="date" :value="form.specialEndDate" @change="onSpecialDate('specialEndDate', $event)">
+            <view class="field">
+              <text>结束</text>
+              <text class="picker-value">{{ form.specialEndDate || '选日期' }}</text>
+            </view>
+          </picker>
+          <picker class="sp-picker" mode="time" :value="form.specialEndTime" @change="onSpecialTime('specialEndTime', $event)">
+            <view class="field">
+              <text>时间</text>
+              <text class="picker-value">{{ form.specialEndTime || '选时间' }}</text>
+            </view>
+          </picker>
+        </view>
       </view>
       <view class="field">
         <text>库存</text>
@@ -99,10 +156,12 @@
               <text class="name">{{ p.name }}</text>
               <text v-if="p.hasSku === 1" class="tag">多规格</text>
               <text v-if="isComboRow(p)" class="tag combo">套餐</text>
+              <text v-if="p.specialPrice && p.specialPrice > 0" class="tag special">特价</text>
             </view>
             <view class="price-row">
-              <text class="price">{{ yuan(p.price) }}</text>
-              <text v-if="showOrigin(p)" class="origin">{{ yuan(p.originPrice) }}</text>
+              <text class="price">{{ yuan(p.specialPrice && p.specialPrice > 0 ? p.specialPrice : p.price) }}</text>
+              <text v-if="p.specialPrice && p.specialPrice > 0" class="origin">{{ yuan(p.price) }}</text>
+              <text v-else-if="showOrigin(p)" class="origin">{{ yuan(p.originPrice) }}</text>
             </view>
             <view class="muted">库存 {{ stockText(p.stock) }}</view>
           </view>
@@ -184,12 +243,15 @@ import {
   type Category,
   type ComboItem,
   type MerchantProduct as Product,
-  type ProductSku
+  type ProductSku,
+  type StockAlert
 } from '../../api'
 import { guard } from '../../utils/auth'
 import AppTabBar from '../../components/AppTabBar.vue'
 
 const products = ref<Product[]>([])
+/** 库存 0..5 的预警菜品（接口已按库存升序，售罄在前） */
+const stockAlerts = ref<StockAlert[]>([])
 const categories = ref<Category[]>([])
 const formVisible = ref(false)
 const editingId = ref(0)
@@ -205,7 +267,13 @@ const form = reactive({
   status: 1,
   categoryId: 0,
   isCombo: false,
-  comboItems: [] as ComboItem[]
+  comboItems: [] as ComboItem[],
+  // 限时特价：金额用元输入，日期/时间拆开给 picker，保存时拼 ISO
+  specialYuan: '',
+  specialStartDate: '',
+  specialStartTime: '',
+  specialEndDate: '',
+  specialEndTime: ''
 })
 
 const skuPanel = ref(false)
@@ -248,6 +316,90 @@ function showOrigin(p: Product) {
   return typeof p.originPrice === 'number' && p.originPrice > 0 && p.originPrice > p.price
 }
 
+// ---------------- 限时特价（specialPrice 分 + ISO 时间） ----------------
+/** ISO '2026-10-25T18:00:00' → { date: '2026-10-25', time: '18:00' } */
+function splitIso(v?: string | null) {
+  const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  return m ? { date: m[1], time: m[2] } : { date: '', time: '' }
+}
+
+/** picker 的日期 + 时间拼成后端要的 ISO：'2026-10-25' + '18:00' → '2026-10-25T18:00:00' */
+function joinIso(date: string, time: string) {
+  return date && time ? `${date}T${time}:00` : ''
+}
+
+/** 本地时间戳（只用于比较先后，不参与提交） */
+function tsOf(date: string, time: string) {
+  if (!date || !time) return NaN
+  const [y, mo, d] = date.split('-').map(Number)
+  const [h, mi] = time.split(':').map(Number)
+  return new Date(y, (mo || 1) - 1, d || 1, h || 0, mi || 0, 0, 0).getTime()
+}
+
+function onSpecialDate(field: 'specialStartDate' | 'specialEndDate', e: any) {
+  form[field] = String(e?.detail?.value || '')
+}
+
+function onSpecialTime(field: 'specialStartTime' | 'specialEndTime', e: any) {
+  form[field] = String(e?.detail?.value || '')
+}
+
+/** 当前正在编辑的菜品里已保存的特价（用来决定是否显示「清除特价」） */
+const hasSpecialSaved = computed(() => {
+  const p = products.value.find((x) => x.id === editingId.value)
+  return !!p && typeof p.specialPrice === 'number' && p.specialPrice > 0
+})
+
+function resetSpecialForm() {
+  form.specialYuan = ''
+  form.specialStartDate = ''
+  form.specialStartTime = ''
+  form.specialEndDate = ''
+  form.specialEndTime = ''
+}
+
+/** 清除特价：specialPrice: 0 后端会把金额与起止时间一起置空 */
+async function clearSpecial() {
+  if (!editingId.value) {
+    resetSpecialForm()
+    return
+  }
+  try {
+    await merchantApi.updateProduct(editingId.value, { specialPrice: 0 })
+    resetSpecialForm()
+    uni.showToast({ title: '已清除特价' })
+    load()
+    loadStockAlerts()
+  } catch (e) {
+    console.warn(e)
+  }
+}
+
+/**
+ * 校验并生成特价三个字段：
+ *  - 金额留空 = 关闭特价，提交 specialPrice: 0（后端按 <=0 清空起止时间）
+ *  - 有金额时必须低于原价，且结束时间晚于开始时间（前端先拦，避免白跑一次接口）
+ */
+function buildSpecial(price: number): { specialPrice: number; specialStartAt: string | null; specialEndAt: string | null } {
+  const yuan = Number(form.specialYuan)
+  const on = form.specialYuan.trim() !== '' && Number.isFinite(yuan) && yuan > 0
+  if (!on) return { specialPrice: 0, specialStartAt: null, specialEndAt: null }
+  const specialPrice = Math.round(yuan * 100)
+  if (specialPrice >= price) throw new Error('特价必须低于原价')
+  if (!form.specialStartDate || !form.specialStartTime || !form.specialEndDate || !form.specialEndTime) {
+    throw new Error('请选择特价的开始与结束时间')
+  }
+  const start = tsOf(form.specialStartDate, form.specialStartTime)
+  const end = tsOf(form.specialEndDate, form.specialEndTime)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) throw new Error('特价时间不合法')
+  if (end <= start) throw new Error('特价结束时间必须晚于开始时间')
+  return {
+    specialPrice,
+    specialStartAt: joinIso(form.specialStartDate, form.specialStartTime),
+    specialEndAt: joinIso(form.specialEndDate, form.specialEndTime)
+  }
+}
+
 const categoryNames = computed(() => categories.value.map((c) => c.name))
 const categoryText = computed(() => categories.value.find((c) => c.id === form.categoryId)?.name || '默认分类')
 const categoryIndex = computed(() => {
@@ -265,6 +417,15 @@ const comboNames = computed(() => comboCandidates.value.map((p) => p.name))
 
 async function load() {
   products.value = await merchantApi.products()
+}
+
+async function loadStockAlerts() {
+  try {
+    stockAlerts.value = (await merchantApi.stockAlerts(5)) || []
+  } catch (e) {
+    // 预警接口失败不影响菜品管理
+    stockAlerts.value = []
+  }
 }
 
 async function loadCategories() {
@@ -299,6 +460,7 @@ function openCreate() {
     isCombo: false,
     comboItems: []
   })
+  resetSpecialForm()
   formVisible.value = true
 }
 
@@ -316,6 +478,14 @@ function edit(p: Product) {
     isCombo: parseCombo(p).length > 0,
     comboItems: parseCombo(p).map((c) => ({ productId: c.productId, name: c.name, qty: c.qty }))
   })
+  // 回填已保存的特价：金额（分→元）+ 起止时间拆成 picker 的日期/时间
+  const start = splitIso(p.specialStartAt)
+  const end = splitIso(p.specialEndAt)
+  form.specialYuan = p.specialPrice && p.specialPrice > 0 ? (Number(p.specialPrice) / 100).toFixed(2) : ''
+  form.specialStartDate = start.date
+  form.specialStartTime = start.time
+  form.specialEndDate = end.date
+  form.specialEndTime = end.time
   formVisible.value = true
   try {
     uni.pageScrollTo({ scrollTop: 0, duration: 200 })
@@ -403,6 +573,15 @@ async function save() {
     return
   }
 
+  // 限时特价：前端先校验（低于原价、结束晚于开始），不合法直接拦住不调接口
+  let special: { specialPrice: number; specialStartAt: string | null; specialEndAt: string | null }
+  try {
+    special = buildSpecial(price)
+  } catch (e: any) {
+    toast(String(e?.message || '特价设置不合法'))
+    return
+  }
+
   const payload: any = {
     name,
     price,
@@ -414,7 +593,11 @@ async function save() {
     categoryId: form.categoryId || undefined,
     status: form.status,
     // 非套餐传 '[]'：空串会被后端 normalize 成 null，而 MyBatis-Plus updateById 跳过 null，清不掉
-    comboItems: form.isCombo ? JSON.stringify(form.comboItems) : '[]'
+    comboItems: form.isCombo ? JSON.stringify(form.comboItems) : '[]',
+    // specialPrice 单位分；0 = 关闭特价（后端同时清空 specialStartAt/specialEndAt）
+    specialPrice: special.specialPrice,
+    specialStartAt: special.specialStartAt,
+    specialEndAt: special.specialEndAt
   }
 
   try {
@@ -423,6 +606,7 @@ async function save() {
     uni.showToast({ title: '已保存' })
     formVisible.value = false
     load()
+    loadStockAlerts()
   } catch (e) {
     console.warn(e)
   }
@@ -436,6 +620,7 @@ async function toggle(p: Product) {
     console.warn(err)
   }
   load()
+  loadStockAlerts()
 }
 
 // ---------------- 规格 ----------------
@@ -526,6 +711,7 @@ onShow(async () => {
   if (!(await ensureMerchantApproved())) return
   await loadCategories()
   load()
+  loadStockAlerts()
 })
 </script>
 
@@ -535,6 +721,18 @@ onShow(async () => {
 .between { display: flex; align-items: center; justify-content: space-between; }
 .title { font-size: 30rpx; font-weight: 700; }
 .add { color: #c2410c; font-size: 26rpx; }
+.alert-card { border: 2rpx solid #fca5a5; background: #fff7f7; }
+.alert-title { font-size: 28rpx; font-weight: 700; color: #b91c1c; }
+.alert-row {
+  display: flex; align-items: center; gap: 14rpx;
+  padding: 16rpx 0; border-bottom: 1rpx solid #fee2e2;
+}
+.alert-name { flex: 1; font-size: 26rpx; color: #374151; }
+.alert-stock { font-size: 24rpx; font-weight: 600; }
+.alert-stock.out { color: #b91c1c; }
+.alert-stock.low { color: #b45309; }
+.alert-status { flex-shrink: 0; }
+.alert-tip { margin-top: 14rpx; font-size: 22rpx; color: #9a3412; line-height: 1.6; }
 .form-title { font-size: 28rpx; font-weight: 600; }
 .muted { color: #7a828c; font-size: 24rpx; }
 .req { color: #dc2626; }
@@ -561,8 +759,7 @@ onShow(async () => {
   color: #9aa1aa; font-size: 44rpx;
 }
 
-.combo-editor { margin-top: 10rpx; background: #fafafa; border-radius: 14rpx; padding: 16rpx; }
-.combo-row { display: flex; align-items: center; justify-content: space-between; padding: 10rpx 0; }
+.combo-editor { margin-top: 10rpx; background: #fafafa; border-radius: 14rpx; padding: 16rpx; }.combo-row { display: flex; align-items: center; justify-content: space-between; padding: 10rpx 0; }
 .combo-name { font-size: 26rpx; flex: 1; }
 .qty { display: flex; align-items: center; margin-right: 16rpx; }
 .qty .op {
@@ -594,6 +791,7 @@ onShow(async () => {
   border-radius: 16rpx; padding: 2rpx 10rpx;
 }
 .tag.combo { color: #1d4ed8; background: #e0ecff; }
+.tag.special { color: #fff; background: #dc2626; }
 .price-row { margin-top: 8rpx; display: flex; align-items: baseline; gap: 10rpx; }
 .price { color: #c2410c; font-weight: 600; font-size: 28rpx; }
 .origin { color: #9ca3af; font-size: 22rpx; text-decoration: line-through; }
@@ -612,6 +810,20 @@ onShow(async () => {
 .op-btn.danger { color: #b91c1c; background: #fef2f2; }
 
 .empty { text-align: center; color: #9ca3af; padding: 80rpx 0; }
+
+/* 限时特价编辑区 */
+.special-box {
+  margin-top: 16rpx; padding: 16rpx 20rpx;
+  background: #fff7ed; border: 1rpx solid #fed7aa; border-radius: 14rpx;
+}
+.special-title { font-size: 26rpx; font-weight: 700; color: #c2410c; }
+.special-clear { font-size: 24rpx; color: #b91c1c; }
+.special-tip { margin-top: 8rpx; line-height: 1.5; }
+.special-row { display: flex; gap: 16rpx; }
+.sp-picker { flex: 1; min-width: 0; }
+.special-box .field { font-size: 24rpx; }
+.special-box .field input { font-size: 24rpx; }
+.special-box .picker-value { font-size: 24rpx; color: #c2410c; }
 
 /* 规格弹层 */
 .mask {

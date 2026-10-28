@@ -28,6 +28,27 @@
         </view>
         <text class="arrow">›</text>
       </view>
+      <view class="item" @click="go('/pages/feedback/index')">
+        <view>
+          <view>意见反馈</view>
+          <view class="muted">意见、投诉、支付问题都可以在这里提</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+      <view class="item" @click="go('/pages/announcement/index')">
+        <view>
+          <view>平台公告</view>
+          <view class="muted">平台通知、活动与配送调整</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
+      <view class="item" @click="onContact">
+        <view>
+          <view>联系客服</view>
+          <view class="muted">客服电话 / 邮箱</view>
+        </view>
+        <text class="arrow">›</text>
+      </view>
     </view>
 
     <view v-if="role !== 'USER'" class="card menu">
@@ -61,7 +82,8 @@
       </view>
     </view>
 
-    <view v-if="role === 'USER'" class="card">
+    <!-- 需求：后台开关控制，默认隐藏；仅 identityApi.config().required === true 时展示 -->
+    <view v-if="role === 'USER' && identityVisible" class="card">
       <view class="sec-title">校内身份</view>
       <view class="row between ident">
         <view>
@@ -117,6 +139,8 @@ const nickname = ref('')
 const merchantStatusText = ref('查看入驻资料与审核进度')
 const riderStatusText = ref('查看骑手入驻资料与审核进度')
 const identity = ref<{ required: boolean; verified: boolean; stuNoMask?: string | null }>({ required: false, verified: false })
+/** 身份认证卡片可见性：默认 false，只有后台 required=true 才展示 */
+const identityVisible = ref(false)
 
 const roleLabel = computed(() => ROLE_LABEL[role.value] || '用户')
 const accountName = ref('')
@@ -166,6 +190,23 @@ function go(url: string) {
   uni.navigateTo({ url })
 }
 
+/** 联系客服：H5/小程序都先弹窗展示电话+邮箱，确认后尝试拨号，失败给出邮箱兜底 */
+function onContact() {
+  uni.showModal({
+    title: '联系客服',
+    content: '客服电话：400-000-0000\n客服邮箱：support@lcu.edu.cn\n服务时间：9:00-21:00',
+    confirmText: '拨打',
+    cancelText: '关闭',
+    success: (r) => {
+      if (!r.confirm) return
+      uni.makePhoneCall({
+        phoneNumber: '4000000000',
+        fail: () => uni.showToast({ title: '当前环境不支持拨号，请通过邮箱联系', icon: 'none' })
+      })
+    }
+  })
+}
+
 /** 消息通知：后台没配模板时只提示，不弹授权框、不报错 */
 async function onNotify() {
   try {
@@ -205,9 +246,13 @@ async function switchRole(r: Role) {
 
 async function loadIdentity() {
   try {
+    // 用公开的 config 决定是否展示，避免后台关闭核验时仍显示「校内身份」卡片
+    const cfg = await identityApi.config()
+    identityVisible.value = cfg?.required === true
+    if (!identityVisible.value) return
     identity.value = (await identityApi.status()) as any
   } catch (e) {
-    // 忽略
+    identityVisible.value = false
   }
 }
 

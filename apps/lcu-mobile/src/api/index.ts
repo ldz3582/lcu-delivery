@@ -4,7 +4,11 @@ export interface Category { id: number; name: string; icon?: string }
 export interface ShopCard {
   id: number; name: string; logo?: string; categoryId: number; campus: number
   bizStatus: number; minAmount: number; packFee: number; deliveryFee: number
-  score: number; monthSales: number; openTime?: string; distance?: number
+  score: number; monthSales: number; openTime?: string
+  /** 传 lng/lat 时后端返回的直线距离（米） */
+  distance?: number
+  /** 传 lng/lat 时后端返回的预计送达分钟数；旧数据可能没有，前端按距离兜底 */
+  etaMinutes?: number
 }
 export interface ProductSku {
   id: number; productId?: number; name: string; price: number; stock: number; status?: number
@@ -23,9 +27,60 @@ export interface Product {
   skus?: ProductSku[]
   status?: number
   categoryId?: number
+  /** 限时特价活动价（分），null/0 表示没设特价 */
+  specialPrice?: number | null
+  specialStartAt?: string | null
+  specialEndAt?: string | null
+  /** true = 此刻正处于特价时段（后端 CartService.specialActive 计算） */
+  specialActive?: boolean
+  /** 当前实际成交价（分）：特价生效时等于 specialPrice，否则等于 price */
+  priceNow?: number
 }
 export interface ShopDetail extends ShopCard {
   address: string; lng: number; lat: number; contactPhone?: string; products: Product[]
+  /** 店铺公告（GET /api/shops/{id}） */
+  notice?: string | null
+  /** 配送范围（米），空表示未限制/未配置 */
+  deliveryRangeMeters?: number | null
+  /** 本店券 + 全场券（GET /api/shops/{id}）；空数组时不展示 */
+  coupons?: ShopCoupon[]
+}
+
+/** 店铺页可领取券（label 已由后端拼好：满20减5 / 满15打8.8折） */
+export interface ShopCoupon {
+  id: number; name: string; label: string
+  type: number; threshold: number; amount: number
+  scope: number; claimed: boolean
+}
+
+/** 平台公告（GET /api/announcements，公开） */
+export interface Announcement {
+  id: number; title: string; content: string
+  position?: number; createdAt?: string
+}
+
+/** 首页运营位（GET /api/banners，公开） */
+export interface Banner {
+  id: number; title: string; image: string
+  /** 1 无跳转 / 2 店铺（linkValue 是 shopId）/ 3 优惠券中心 */
+  linkType: number
+  /** linkType=2 时是 shopId 字符串 */
+  linkValue?: string | number | null
+  sort?: number; status?: number
+  startAt?: string | null; endAt?: string | null
+}
+
+/** 首页限时特价卡片（GET /api/specials，公开） */
+export interface SpecialItem {
+  productId: number; name: string; image?: string
+  /** 原价（分） */
+  price: number
+  /** 特价（分） */
+  specialPrice: number
+  specialEndAt?: string | null
+  /** 例如 85 表示 8.5 折 */
+  discountPercent: number
+  shopId: number; shopName?: string; campus?: number
 }
 export interface Address {
   id: number; campus?: number; detail: string; building?: string; floor?: string
@@ -34,6 +89,8 @@ export interface Address {
 export interface OrderCard {
   id: number; orderNo: string; shopId: number; status: number; statusText: string
   payAmount: number; goodsAmount: number; deliveryFee: number; createdAt: string
+  /** GET /api/orders 每行返回：这单是否已评价（待评价 tab 用 reviewed=0 过滤） */
+  reviewed?: boolean
 }
 export interface Bill {
   goodsAmount: number; packFee: number; deliveryFee: number; discountAmount: number
@@ -89,6 +146,11 @@ export const api = {
   categories: () => http.get<Category[]>('/api/categories'),
   shops: (params: Record<string, any>) => http.get<{ list: ShopCard[]; total: number }>('/api/shops', params),
   shop: (id: number) => http.get<ShopDetail>(`/api/shops/${id}`),
+  /** 首页 Banner 轮播（公开；失败时首页只是不渲染该区块） */
+  banners: () => http.get<Banner[]>('/api/banners', undefined, { showError: false }),
+  /** 首页限时特价专区（公开；只返回此刻正在特价且在售的菜品，按折扣力度升序） */
+  specials: (limit = 10) =>
+    http.get<SpecialItem[]>('/api/specials', { limit }, { showError: false }),
   calculate: (shopId: number, items: { productId: number; qty: number }[], userCouponId?: number | null) =>
     http.post<Bill>('/api/cart/calculate', { shopId, items, userCouponId }),
 
@@ -100,7 +162,18 @@ export const api = {
     http.post<any>('/api/addresses/parse', { text, lng, lat }),
 
   createOrder: (data: any) => http.post<{ orderId: number; orderNo: string; payAmount: number }>('/api/orders', data),
-  orders: (status?: number) => http.get<{ list: OrderCard[]; total: number }>('/api/orders', { status, page: 1, size: 20 }),
+  /**
+   * 我的订单。statuses 传 "70,80" 做多状态过滤；reviewed=0/1 只看未评价/已评价；
+   * 分页由调用方控制，避免只取第一页导致售后单漏显示。
+   */
+  orders: (params?: { status?: number; statuses?: string; reviewed?: number; page?: number; size?: number }) =>
+    http.get<{ list: OrderCard[]; total: number }>('/api/orders', {
+      status: params?.status,
+      statuses: params?.statuses,
+      reviewed: params?.reviewed,
+      page: params?.page ?? 1,
+      size: params?.size ?? 20
+    }),
   order: (id: number) => http.get<any>(`/api/orders/${id}`),
   /** 配送进度/骑手位置；轮询场景静默失败，由页面降级，不弹 toast */
   track: (id: number) => http.get<OrderTrack>(`/api/orders/${id}/track`, undefined, { showError: false }),
@@ -163,9 +236,47 @@ export const afterSaleApi = {
   /** 外层是 {list,total,page,size}，不是裸数组；status: 0 待处理 / 1 处理中 / 2 已退款 / 3 已驳回 / 4 已关闭 */
   mine: (params?: { status?: number; page?: number; size?: number }) =>
     http.get<{ list: AfterSale[]; total: number; page?: number; size?: number }>('/api/after-sales/mine', params),
-  detail: (id: number) => http.get<AfterSale>(`/api/after-sales/${id}`),
   /** 仅「待处理」可撤销 */
   cancel: (id: number) => http.post(`/api/after-sales/${id}/cancel`)
+}
+
+// ---------------- 意见反馈 ----------------
+/** 我的反馈（GET /api/feedback/mine）：status 0 待处理 / 1 处理中 / 2 已处理 */
+export interface Feedback {
+  id: number; type: number; typeText: string; content: string
+  /** 库里存的是 JSON 字符串，后端原样返回；解析函数见 parseFeedbackImages */
+  images?: string | string[] | null
+  contact?: string | null
+  status: number; statusText: string
+  reply?: string | null
+  createdAt?: string; handledAt?: string | null
+}
+export interface FeedbackCreateReq {
+  /** 1 意见建议 / 2 投诉 / 3 支付问题 / 4 其他 */
+  type: number
+  /** 最多 1000 字，后端校验 */
+  content: string
+  images?: string[]
+  contact?: string
+}
+
+export const feedbackApi = {
+  /** 提交反馈，返回反馈 id；内容为空/超 1000 字由后端返回业务错误文案 */
+  submit: (data: FeedbackCreateReq) => http.post<number>('/api/feedback', data),
+  /** 我的反馈列表（最近 50 条），images 需要前端解析 JSON 字符串 */
+  mine: () => http.get<Feedback[]>('/api/feedback/mine', undefined, { showError: false })
+}
+
+/** 反馈图片：后端返回 JSON 字符串，这里统一转成数组（脏数据降级为空数组） */
+export function parseFeedbackImages(v?: string | string[] | null): string[] {
+  if (!v) return []
+  if (Array.isArray(v)) return v.filter((x) => !!x)
+  try {
+    const arr = JSON.parse(v)
+    return Array.isArray(arr) ? arr.filter((x: any) => !!x) : []
+  } catch (e) {
+    return []
+  }
 }
 
 // ---------------- 订阅消息 ----------------
@@ -204,6 +315,12 @@ export const favoriteApi = {
 export interface MerchantShop {
   id: number; name: string; bizStatus: number; auditStatus: number; openTime: string
   minAmount: number; packFee: number; deliveryFee: number; commissionRate: number
+  /** 店铺公告 */
+  notice?: string | null
+  /** 1 接收消息推送 / 0 关闭 */
+  pushEnabled?: number | null
+  /** 配送范围（米），null 表示不限 */
+  deliveryRangeMeters?: number | null
 }
 export interface MerchantOrder {
   id: number; orderNo: string; status: number; statusText: string
@@ -217,6 +334,17 @@ export interface MerchantProduct {
   /** 后端实体直接返回，这里是 JSON 字符串：'[{"productId":1,"name":"黄焖鸡","qty":2}]' */
   comboItems?: string | null
   sort?: number
+  /** 限时特价（分）：>0 且在 [specialStartAt, specialEndAt] 内才生效；0/null 表示关闭 */
+  specialPrice?: number | null
+  /** ISO 字符串，如 2026-10-25T18:00:00 */
+  specialStartAt?: string | null
+  specialEndAt?: string | null
+}
+
+/** 库存预警（GET /api/merchant/stock-alerts），stock 范围 0..threshold */
+export interface StockAlert {
+  productId: number; name: string; stock: number; status: number
+  statusText: string; soldOut: boolean
 }
 
 /** 商家入驻状态：没店 applied=false；其余带店铺资料与审核状态 */
@@ -290,6 +418,9 @@ export const merchantApi = {
   reject: (id: number, reason: string) => http.post(`/api/merchant/orders/${id}/reject`, { reason }),
   ready: (id: number) => http.post(`/api/merchant/orders/${id}/ready`),
   products: () => http.get<MerchantProduct[]>('/api/merchant/products', { includeOffline: true }),
+  /** 库存预警：返回库存 0..threshold 的在售/已下架菜品，soldOut=true 表示已售罄 */
+  stockAlerts: (threshold = 5) =>
+    http.get<StockAlert[]>('/api/merchant/stock-alerts', { threshold }, { showError: false }),
   createProduct: (data: Partial<MerchantProduct>) => http.post<MerchantProduct>('/api/merchant/products', data),
   updateProduct: (id: number, data: Partial<MerchantProduct>) => http.put<MerchantProduct>(`/api/merchant/products/${id}`, data),
   /** 规格 SKU：新增/删除会自动维护商品的 hasSku 与展示价（取最低规格价） */
@@ -321,8 +452,12 @@ export const merchantApi = {
     http.put(`/api/merchant/coupons/${id}/status`, { status })
 }
 
-/** 上传接口按 uni.uploadFile 走，复用一个 base（与 utils/request.ts 的默认值保持一致） */
-const UPLOAD_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8080'
+/**
+ * 上传接口按 uni.uploadFile 走，复用一个 base（与 utils/request.ts 的 BASE_URL 保持一致）：
+ * 不配 VITE_API_BASE 时同样走「同源相对路径」，由 serve.mjs 把 /api 代理到后端，
+ * 避免 H5 里请求打到相对路径、上传却打到写死的 8080 端口。
+ */
+const UPLOAD_BASE = (import.meta as any).env?.VITE_API_BASE || ''
 
 /**
  * 图片上传：uni.uploadFile 不是 XHR，得单独封装。
@@ -378,6 +513,13 @@ export interface RiderStatus {
   idCardFront?: string; idCardBack?: string; studentCard?: string
   agreementSignedAt?: string; insuranceNo?: string | null
 }
+/** 骑手中心资料（GET /api/rider/profile，PUT /api/rider/settings 也返回同一结构） */
+export interface RiderProfile {
+  id: number; auditStatus: number; workStatus: number
+  score?: number; totalOrders?: number; maxConcurrent?: number
+  workTime?: string | null; phoneMask?: string
+}
+
 export interface RiderApplyReq {
   /** 首次提交必填；驳回后重提可留空，后端沿用原值 */
   realName?: string; idCard?: string; stuNo?: string; phone?: string
@@ -408,6 +550,8 @@ export interface RiderOrder {
   /** 收货点坐标（可能为空） */
   lng?: number; lat?: number
   riderIncome?: number; pickedAt?: string; deliveredAt?: string
+  /** 订单备注（后端未返回时页面从 address JSON.remark 兜底） */
+  remark?: string
   /** 该单已上报异常条数 */
   incident?: number
 }
@@ -458,7 +602,10 @@ export const riderApi = {
   /** 提交/重新提交入驻申请；后端校验身份证/学号/手机/三张图/协议勾选 */
   apply: (data: RiderApplyReq) =>
     http.post<{ riderId: number; auditStatus: number }>('/api/rider/apply', data),
-  profile: () => http.get<any>('/api/rider/profile'),
+  profile: () => http.get<RiderProfile>('/api/rider/profile'),
+  /** 接单设置：开关接单 / 同时接单上限 1~10 / 可接单时段 */
+  updateSettings: (data: { workStatus?: number; maxConcurrent?: number; workTime?: string }) =>
+    http.put<RiderProfile>('/api/rider/settings', data),
   pool: (lng?: number, lat?: number) => http.get<RiderPoolItem[]>('/api/rider/pool', { lng, lat }),
   /** 系统派给我的单（需骑手确认） */
   dispatched: () => http.get<RiderDispatchedOrder[]>('/api/rider/dispatched'),
@@ -471,6 +618,8 @@ export const riderApi = {
     http.post<number>(`/api/rider/orders/${orderId}/incident`, data),
   incidents: () => http.get<RiderIncident[]>('/api/rider/incidents'),
   grab: (id: number) => http.post(`/api/rider/orders/${id}/grab`),
+  /** 取消配送：仅 30 待取餐可取消，订单退回抢单大厅；40 需走异常上报 */
+  cancel: (id: number) => http.post(`/api/rider/orders/${id}/cancel`),
   pickup: (id: number, photo?: string) => http.post(`/api/rider/orders/${id}/pickup`, { photo }),
   deliver: (id: number, photo?: string) => http.post(`/api/rider/orders/${id}/deliver`, { photo }),
   location: (lng: number, lat: number, orderId?: number) => http.post('/api/rider/location', { lng, lat, accuracy: 15, orderId }),
@@ -503,61 +652,20 @@ export async function ensureRiderApproved(): Promise<boolean> {
   return false
 }
 
-// ---------------- 管理员端 ----------------
-export interface Overview {
-  todayOrders: number
-  todayGmv: number
-  totalShops: number
-  pendingShops: number
-  totalRiders: number
-  pendingRiders: number
-  totalUsers: number
-  inDelivery: number
-}
-
-export interface AdminShop {
-  id: number
-  name: string
-  campus: number | null
-  address: string
-  contactPhone: string
-  auditStatus: number
-  bizStatus: number
-  licenseUrl?: string
-  permitUrl?: string
-  commissionRate?: number
-}
-
-export interface AdminOrder {
-  id: number
-  orderNo: string
-  userId: number
-  shopId: number
-  riderId: number | null
-  status: number
-  statusText: string
-  payAmount: number
-  commission: number
-  createdAt: string
-}
-
-export const adminApi = {
-  overview: () => http.get<Overview>('/api/admin/overview'),
-  shops: (params: { auditStatus?: number; page: number; size: number }) =>
-    http.get<{ list: AdminShop[]; total: number }>('/api/admin/shops', params),
-  auditShop: (id: number, pass: boolean, reason = '') =>
-    http.post(`/api/admin/shops/${id}/audit`, { pass, reason }),
-  riders: (params: { auditStatus?: number; page: number; size: number }) =>
-    http.get<{ list: any[]; total: number }>('/api/admin/riders', params),
-  orders: (params: { status?: number; keyword?: string; page: number; size: number }) =>
-    http.get<{ list: AdminOrder[]; total: number }>('/api/admin/orders', params)
-}
-
 // ---------------- 校内身份核验 ----------------
 export interface IdentityStatus {
   required: boolean
   verified?: boolean
   stuNoMask?: string | null
+  /** 平台功能开关：地址文本解析（GET /api/identity/config） */
+  addressParse?: boolean
+  /** 平台功能开关：围栏校验 */
+  fenceEnforce?: boolean
+}
+
+/** 平台公告：公开接口，失败时页面显示「暂无公告」 */
+export const announcementApi = {
+  list: () => http.get<Announcement[]>('/api/announcements', undefined, { showError: false })
 }
 
 export const identityApi = {
