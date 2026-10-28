@@ -10,12 +10,18 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  // DSH sandbox: esbuild's child-process service cannot be spawned (EPERM on
+  // piped stdio), so node_modules/esbuild is shimmed to the in-process wasm
+  // build, which has no real filesystem access. Skip dependency pre-bundling.
+  optimizeDeps: {
+    noDiscovery: true,
+  },
   server: {
     host: '127.0.0.1',
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },
