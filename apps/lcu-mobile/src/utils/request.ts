@@ -1,7 +1,8 @@
 // 统一请求封装：自动带 token，业务码非 0 抛错，401 清登录态并回登录页
-// VITE_API_BASE 不配置时走「同源相对路径」：H5 由 serve.mjs 把 /api 代理到后端，端口怎么变都不用重新打包；
-// 小程序（mp-weixin）没有代理，构建时必须显式传 VITE_API_BASE=http://127.0.0.1:8081
-const BASE_URL = (import.meta as any).env?.VITE_API_BASE || ''
+// 接口基址见 utils/config.ts：不配 VITE_API_BASE 时走同源相对路径（由 serve.mjs 代理），
+// 小程序构建时必须显式传 VITE_API_BASE。
+import { BASE_URL } from './config'
+import { normalizeMedia } from './media'
 
 export interface ApiResp<T> {
   code: number
@@ -70,7 +71,8 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
       success: (res: any) => {
         const body = res.data as ApiResp<T>
         if (body && body.code === 0) {
-          resolve(body.data)
+          // 统一处理历史数据里的绝对图片地址（见 utils/media.ts）
+          resolve(normalizeMedia(body.data))
         } else {
           const msg = body?.msg || `请求失败(${res.statusCode})`
           if (body?.code === 401) {

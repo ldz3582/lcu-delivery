@@ -24,6 +24,11 @@ export default defineConfig({
         target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
+      // 上传的图片走同源相对路径，开发时也要代理到后端，换端口只需改 VITE_API_TARGET
+      '/uploads': {
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
     },
   },
   build: {

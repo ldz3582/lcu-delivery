@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
+import { normalizeMedia } from '@/utils/media'
 
 export const TOKEN_KEY = 'lcu_admin_token'
 export const NAME_KEY = 'lcu_admin_real_name'
@@ -43,7 +44,8 @@ http.interceptors.response.use(
     // 统一响应体
     if (body && typeof body === 'object' && typeof body.code === 'number') {
       if (body.code === 0) {
-        return body.data as never
+        // 统一把历史数据里的绝对图片地址还原成同源相对路径（见 utils/media.ts）
+        return normalizeMedia(body.data) as never
       }
       if (body.code === 401) {
         ElMessage.error(body.msg || '登录已过期，请重新登录')

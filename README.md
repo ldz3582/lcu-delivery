@@ -219,6 +219,17 @@ H5 端不需要配 `VITE_API_BASE`：默认走同源相对路径，由静态服�
 5. **订阅消息**：模板 ID 到位后接 `notify_log` 表发送
 6. **代码审核材料**：隐私指引、类目、测试账号（见手册 2.3 / 4.5）
 
+## 静态资源与图片地址
+
+图片统一由后端 `/uploads/**` 提供。为避免"后端换端口图片就 404"，两个前端在**请求层做地址归一化**
+（`apps/admin-web/src/utils/media.ts`、`apps/lcu-mobile/src/utils/media.ts`）：
+
+- 库里存的绝对地址（如 `http://127.0.0.1:8082/uploads/...`）会被还原成 `/uploads/...`
+- 管理端 / H5 走同源相对路径，由各自的反向代理转发（`serve.mjs` 与 Vite `server.proxy` 都代理了 `/uploads`）
+- 小程序按构建时注入的 `VITE_API_BASE` 拼成绝对地址
+
+所以换后端端口时只需要改代理目标（`VITE_API_TARGET`）和重新构建小程序，**不用改库里的数据**。
+
 ## 验证记录
 
 - 后端 `mvn package` 通过；`/actuator/health` = UP
