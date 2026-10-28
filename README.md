@@ -167,6 +167,29 @@ cd ops
 ./smoke-test.sh          # 另开终端，跑完整链路（可选 ADMIN_PASSWORD=... 测后台）
 ```
 
+### Windows 一键启动（本机）
+
+用 Docker 不方便时，可以直接用 `ops/dev-windows.ps1` 起整套本地环境
+（MySQL 3307 / Redis 6380 / 后端 8082 / 管理端 5176 / H5 5175）：
+
+```powershell
+pwsh -File ops\dev-windows.ps1 status     # 看状态
+pwsh -File ops\dev-windows.ps1 start      # 起（只补缺的，幂等）
+pwsh -File ops\dev-windows.ps1 restart    # 全量重启
+pwsh -File ops\dev-windows.ps1 stop       # 停
+```
+
+说明：
+
+- 需要 `D:\develop\waimai-env` 这套工具链（JDK / Maven / MySQL / Redis / Node22），
+  放在别处时先 `$env:WLB_ENV_ROOT='X:\your-env'`
+- 项目路径含中文，MySQL/Redis 解析不了，脚本会在 `%TEMP%` 下自动重建
+  `lcu-link`（→ `.local`）和 `lcu-proj`（→ 仓库根）两个 junction
+- 服务通过 WMI 启动，**脱离当前终端**，关掉窗口也不会挂；日志在 `.local\logs`，
+  PID 在 `.local\run`
+- 后端优先用 `server\target\classes` + `.local\app-deps\lib`（改代码只需重编译，
+  `start -Build` 会先跑 `mvn package`），没有再用 fat jar
+
 两个前端：
 
 ```bash
