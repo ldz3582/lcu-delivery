@@ -42,6 +42,9 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/shops/**",
                         "/api/fence",
                         "/api/identity/config",
+                        "/api/announcements",
+                        "/api/banners",
+                        "/api/specials",
                         "/api/pay/notify",
                         "/api/health"
                 );

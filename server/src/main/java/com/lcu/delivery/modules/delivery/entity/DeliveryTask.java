@@ -23,7 +23,6 @@ public class DeliveryTask {
     private LocalDateTime grabAt;
     private LocalDateTime pickupAt;
     private LocalDateTime deliveredAt;
-    private Integer timeoutFlag;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -107,13 +106,6 @@ public class DeliveryTask {
         this.deliveredAt = deliveredAt;
     }
 
-    public Integer getTimeoutFlag() {
-        return timeoutFlag;
-    }
-
-    public void setTimeoutFlag(Integer timeoutFlag) {
-        this.timeoutFlag = timeoutFlag;
-    }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

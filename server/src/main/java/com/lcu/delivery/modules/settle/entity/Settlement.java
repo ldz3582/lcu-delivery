@@ -22,6 +22,9 @@ public class Settlement {
     /** 0 待结算 1 已结算 2 已撤销 */
     private Integer status;
     private LocalDateTime settleAt;
+    /** 冲正原因（退款/售后逆向） */
+    private String reverseReason;
+    private LocalDateTime reversedAt;
     private LocalDateTime createdAt;
 
     public Long getId() {
@@ -102,6 +105,22 @@ public class Settlement {
 
     public void setSettleAt(LocalDateTime settleAt) {
         this.settleAt = settleAt;
+    }
+
+    public String getReverseReason() {
+        return reverseReason;
+    }
+
+    public void setReverseReason(String reverseReason) {
+        this.reverseReason = reverseReason;
+    }
+
+    public LocalDateTime getReversedAt() {
+        return reversedAt;
+    }
+
+    public void setReversedAt(LocalDateTime reversedAt) {
+        this.reversedAt = reversedAt;
     }
 
     public LocalDateTime getCreatedAt() {

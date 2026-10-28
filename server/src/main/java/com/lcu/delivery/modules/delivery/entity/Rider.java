@@ -32,6 +32,10 @@ public class Rider {
     private String rejectReason;
     /** 0 待审 1 通过 2 驳回 */
     private Integer auditStatus;
+    /** 1 正常 0 封禁（封禁原因存 rider.ban_reason 列，由后台原生 SQL 写入，不走实体） */
+    private Integer status;
+    /** 可接单时段，如 11:00-13:00,17:00-20:00 */
+    private String workTime;
     /** 0 离线 1 接单中 2 忙碌 */
     private Integer workStatus;
     private Integer deposit;
@@ -170,10 +174,25 @@ public class Rider {
         this.workStatus = workStatus;
     }
 
+    public Integer getStatus() {
+        return status;
+    }
+
+    public void setStatus(Integer status) {
+        this.status = status;
+    }
+
+    public String getWorkTime() {
+        return workTime;
+    }
+
+    public void setWorkTime(String workTime) {
+        this.workTime = workTime;
+    }
+
     public Integer getDeposit() {
         return deposit;
     }
-
     public void setDeposit(Integer deposit) {
         this.deposit = deposit;
     }

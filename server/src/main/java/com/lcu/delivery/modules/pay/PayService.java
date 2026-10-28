@@ -11,6 +11,7 @@ import com.lcu.delivery.modules.order.entity.Order;
 import com.lcu.delivery.modules.order.mapper.OrderMapper;
 import com.lcu.delivery.modules.pay.entity.Payment;
 import com.lcu.delivery.modules.pay.mapper.PaymentMapper;
+import com.lcu.delivery.modules.settle.SettlementService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,9 +34,11 @@ public class PayService {
     private final AppProperties app;
     private final JdbcTemplate jdbc;
     private final CouponService couponService;
+    private final SettlementService settlementService;
 
     public PayService(PaymentMapper paymentMapper, OrderMapper orderMapper, OrderService orderService,
-                      PayGateway gateway, AppProperties app, JdbcTemplate jdbc, CouponService couponService) {
+                      PayGateway gateway, AppProperties app, JdbcTemplate jdbc, CouponService couponService,
+                      SettlementService settlementService) {
         this.paymentMapper = paymentMapper;
         this.orderMapper = orderMapper;
         this.orderService = orderService;
@@ -43,6 +46,7 @@ public class PayService {
         this.app = app;
         this.jdbc = jdbc;
         this.couponService = couponService;
+        this.settlementService = settlementService;
     }
 
     @Transactional
@@ -197,8 +201,12 @@ public class PayService {
                 operatorType, operatorId, gateway.mock() ? LocalDateTime.now() : null, LocalDateTime.now());
 
         if (!markRefunded) {
+            // 部分退款：冲减对应结算单（未结算改金额，已结算从钱包扣回），避免「退了钱还全额结算」
+            settlementService.reversePartial(orderId, refundAmount, reason);
             return;
         }
+        // 全额退款：结算单作废 / 已打款的从钱包扣回，保证账实一致
+        settlementService.reverseFull(orderId, reason);
         if (order.getStatus() != OrderStatus.CANCELED && order.getStatus() != OrderStatus.REFUNDED) {
             orderService.restoreStock(orderId);
         }

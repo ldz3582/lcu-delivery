@@ -1,6 +1,7 @@
 package com.lcu.delivery.job;
 
 import com.lcu.delivery.config.AppProperties;
+import com.lcu.delivery.modules.admin.SysConfigService;
 import com.lcu.delivery.modules.settle.SettlementService;
 import com.lcu.delivery.modules.settle.entity.Settlement;
 import org.slf4j.Logger;
@@ -19,16 +20,23 @@ public class SettleJob {
 
     private final SettlementService settlementService;
     private final AppProperties app;
+    private final SysConfigService config;
 
-    public SettleJob(SettlementService settlementService, AppProperties app) {
+    public SettleJob(SettlementService settlementService, AppProperties app, SysConfigService config) {
         this.settlementService = settlementService;
         this.app = app;
+        this.config = config;
     }
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
     public void settle() {
-        LocalDateTime deadline = LocalDateTime.now().minusDays(app.settleFreezeDays());
+        // T+N 冻结天数以后台配置为准（settle.freeze_days），没有配置才回落启动参数
+        int freezeDays = Math.max(0, config.getInt("settle.freeze_days", app.settleFreezeDays()));
+        LocalDateTime deadline = LocalDateTime.now().minusDays(freezeDays);
         List<Settlement> due = settlementService.dueList(deadline);
+        if (!due.isEmpty()) {
+            log.info("待结算 {} 单（冻结 {} 天，截止 {}）", due.size(), freezeDays, deadline);
+        }
         for (Settlement s : due) {
             try {
                 settlementService.settle(s);

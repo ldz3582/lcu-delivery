@@ -68,8 +68,107 @@ public class SettlementService {
         }
     }
 
-    private void credit(int ownerType, Long ownerId, Integer amount, String bizType, String bizNo, String remark) {
-        if (amount == null || amount <= 0) {
+    /** 钱包入账（外部模块用，如用户取消违约金补偿给商家）。 */
+    @Transactional
+    public void creditShop(Long shopId, int amount, String bizType, String bizNo, String remark) {
+        credit(2, shopId, amount, bizType, bizNo, remark);
+    }
+
+    public Settlement findByOrder(Long orderId) {
+        return settlementMapper.selectOne(Wrappers.<Settlement>lambdaQuery()
+                .eq(Settlement::getOrderId, orderId).last("limit 1"));
+    }
+
+    /**
+     * 全额退款冲正：结算单直接作废；若已打款，则从商家/骑手钱包扣回（余额不足则扣到 0 并记欠款）。
+     * 幂等：status=2 直接返回。
+     */
+    @Transactional
+    public void reverseFull(Long orderId, String reason) {
+        Settlement s = findByOrder(orderId);
+        if (s == null || (s.getStatus() != null && s.getStatus() == 2)) {
+            return;
+        }
+        if (s.getStatus() != null && s.getStatus() == 1) {
+            debit(2, s.getShopId(), s.getShopIncome(), "SETTLE_REVERSE", String.valueOf(s.getId()) + "-S",
+                    "订单退款冲正商家结算");
+            debit(3, s.getRiderId(), s.getRiderIncome(), "SETTLE_REVERSE", String.valueOf(s.getId()) + "-R",
+                    "订单退款冲正骑手收入");
+            s.setShopIncome(0);
+            s.setRiderIncome(0);
+        }
+        s.setStatus(2);
+        s.setReverseReason(reason);
+        s.setReversedAt(LocalDateTime.now());
+        settlementMapper.updateById(s);
+    }
+
+    /**
+     * 部分退款冲减：结算单金额相应减少（未结算的直接改金额，已结算的从钱包扣回）。
+     * bizNo 里带本次退款金额，保证多次部分退款各自幂等。
+     */
+    @Transactional
+    public void reversePartial(Long orderId, int amount, String reason) {
+        if (amount <= 0) {
+            return;
+        }
+        Settlement s = findByOrder(orderId);
+        if (s == null || (s.getStatus() != null && s.getStatus() == 2)) {
+            return;
+        }
+        int shopIncome = s.getShopIncome() == null ? 0 : s.getShopIncome();
+        int deduct = Math.min(amount, shopIncome);
+        if (deduct <= 0) {
+            return;
+        }
+        if (s.getStatus() != null && s.getStatus() == 1) {
+            debit(2, s.getShopId(), deduct, "SETTLE_REVERSE", String.valueOf(s.getId()) + "-P" + amount,
+                    "售后部分退款冲减商家结算");
+        }
+        s.setShopIncome(shopIncome - deduct);
+        s.setReverseReason(reason);
+        s.setReversedAt(LocalDateTime.now());
+        settlementMapper.updateById(s);
+    }
+
+    /** 钱包扣款（可扣到 0，不足部分写在流水备注里，便于人工追缴）。 */
+    private void debit(int ownerType, Long ownerId, Integer amount, String bizType, String bizNo, String remark) {
+        if (ownerId == null || amount == null || amount <= 0) {
+            return;
+        }
+        Wallet wallet = walletMapper.selectOne(Wrappers.<Wallet>lambdaQuery()
+                .eq(Wallet::getOwnerType, ownerType).eq(Wallet::getOwnerId, ownerId));
+        if (wallet == null) {
+            return;
+        }
+        Long dup = flowMapper.selectCount(Wrappers.<WalletFlow>lambdaQuery()
+                .eq(WalletFlow::getBizType, bizType).eq(WalletFlow::getBizNo, bizNo)
+                .eq(WalletFlow::getWalletId, wallet.getId()));
+        if (dup != null && dup > 0) {
+            return;
+        }
+        int balance = wallet.getBalance() == null ? 0 : wallet.getBalance();
+        int actual = Math.min(balance, amount);
+        int after = balance - actual;
+        wallet.setBalance(after);
+        wallet.setUpdatedAt(LocalDateTime.now());
+        walletMapper.updateById(wallet);
+
+        WalletFlow flow = new WalletFlow();
+        flow.setWalletId(wallet.getId());
+        flow.setBizType(bizType);
+        flow.setBizNo(bizNo);
+        flow.setDirection(-1);
+        flow.setAmount(actual);
+        flow.setBalanceAfter(after);
+        flow.setRemark(actual < amount
+                ? remark + "（余额不足，应扣 " + amount + " 分，实扣 " + actual + " 分，欠 " + (amount - actual) + " 分）"
+                : remark);
+        flow.setCreatedAt(LocalDateTime.now());
+        flowMapper.insert(flow);
+    }
+
+    private void credit(int ownerType, Long ownerId, Integer amount, String bizType, String bizNo, String remark) {        if (amount == null || amount <= 0) {
             return;
         }
         Wallet wallet = walletMapper.selectOne(Wrappers.<Wallet>lambdaQuery()

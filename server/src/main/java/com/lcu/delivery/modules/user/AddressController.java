@@ -2,6 +2,9 @@ package com.lcu.delivery.modules.user;
 
 import com.lcu.delivery.common.Result;
 import com.lcu.delivery.common.UserContext;
+import com.lcu.delivery.common.BizException;
+import com.lcu.delivery.common.ErrorCode;
+import com.lcu.delivery.modules.admin.SysConfigService;
 import com.lcu.delivery.modules.fence.FenceService;
 import com.lcu.delivery.modules.user.entity.UserAddress;
 import jakarta.validation.Valid;
@@ -19,10 +22,12 @@ public class AddressController {
 
     private final AddressService addressService;
     private final FenceService fenceService;
+    private final SysConfigService config;
 
-    public AddressController(AddressService addressService, FenceService fenceService) {
+    public AddressController(AddressService addressService, FenceService fenceService, SysConfigService config) {
         this.addressService = addressService;
         this.fenceService = fenceService;
+        this.config = config;
     }
 
     @GetMapping
@@ -52,6 +57,10 @@ public class AddressController {
     /** 粘贴解析：返回结构化字段 + 置信度 + 是否在围栏内，前端回填后允许用户修改。 */
     @PostMapping("/parse")
     public Result<Map<String, Object>> parse(@RequestBody @Valid ParseReq req) {
+        // 后台开关 feature.address_parse：关闭后只能手动录入地址
+        if (!config.getBool("feature.address_parse", true)) {
+            throw new BizException(ErrorCode.PARAM, "平台已关闭地址粘贴解析，请手动填写收货地址");
+        }
         AddressParser.Parsed parsed = AddressParser.parse(req.text());
         boolean inFence = req.lng() != null && req.lat() != null && fenceService.inside(req.lng(), req.lat());
         Map<String, Object> data = new LinkedHashMap<>();

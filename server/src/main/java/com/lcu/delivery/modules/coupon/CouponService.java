@@ -94,6 +94,59 @@ public class CouponService {
         return rows;
     }
 
+    /**
+     * 店铺页展示的「本店满减/折扣活动」：本店券 + 平台全场券。
+     * 与 available 的区别：已领过的也返回（前端显示"已领"），未登录也能看。
+     */
+    public List<Map<String, Object>> shopCoupons(Long shopId, Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Coupon> list = couponMapper.selectList(Wrappers.<Coupon>lambdaQuery()
+                .eq(Coupon::getStatus, 1)
+                .le(Coupon::getStartAt, now)
+                .ge(Coupon::getEndAt, now)
+                .gt(Coupon::getRemain, 0)
+                .and(w -> w.eq(Coupon::getScope, 1).or().eq(Coupon::getShopId, shopId))
+                .orderByAsc(Coupon::getThreshold));
+        Set<Long> claimed = new LinkedHashSet<>();
+        if (userId != null) {
+            for (UserCoupon uc : userCouponMapper.selectList(Wrappers.<UserCoupon>lambdaQuery()
+                    .eq(UserCoupon::getUserId, userId))) {
+                claimed.add(uc.getCouponId());
+            }
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Coupon c : list) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", c.getId());
+            m.put("name", c.getName());
+            m.put("type", c.getType());
+            m.put("threshold", c.getThreshold());
+            m.put("amount", c.getAmount());
+            m.put("scope", c.getScope());
+            m.put("claimed", claimed.contains(c.getId()));
+            // 前端直接展示的文案：满20减5 / 满15打8.8折
+            String label;
+            if (c.getType() != null && c.getType() == TYPE_DISCOUNT) {
+                label = "满" + yuan(c.getThreshold()) + "打" + (c.getAmount() / 100.0) + "折";
+            } else {
+                label = "满" + yuan(c.getThreshold()) + "减" + yuan(c.getAmount());
+            }
+            m.put("label", label);
+            rows.add(m);
+        }
+        return rows;
+    }
+
+    private static String yuan(Integer fen) {
+        if (fen == null) {
+            return "0";
+        }
+        java.math.BigDecimal d = java.math.BigDecimal.valueOf(fen)
+                .divide(java.math.BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP)
+                .stripTrailingZeros();
+        return d.toPlainString();
+    }
+
     /** 领券：库存用条件更新扣减，防超发；同一张券每人限领一张。 */
     @Transactional
     public void claim(Long userId, Long couponId) {

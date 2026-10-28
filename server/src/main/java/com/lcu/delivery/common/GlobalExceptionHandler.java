@@ -46,6 +46,43 @@ public class GlobalExceptionHandler {
         return Result.fail(ErrorCode.NOT_FOUND, "接口不存在：" + e.getResourcePath());
     }
 
+    /**
+     * 字段超长/超范围类数据库错误：属于**调用方传入数据不合法**，应该回 1001 而不是 500。
+     * 典型：昵称/店铺名/菜品名/评价内容超过列长度，前端没做长度校验就直接提交。
+     */
+    @ExceptionHandler({org.springframework.dao.DataIntegrityViolationException.class,
+            org.springframework.dao.DataAccessException.class})
+    public Result<Void> handleDataTooLong(Exception e) {
+        log.warn("数据写入被数据库拒绝（多半是字段超长/非法字符）：{}", e.getMessage());
+        return Result.fail(ErrorCode.PARAM, "提交的内容过长或格式不合法，请精简后重试");
+    }
+
+    /**
+     * 请求体不是合法 JSON / 缺字段：属于调用方问题，回 1001，不要 500。
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public Result<Void> handleBadBody(org.springframework.http.converter.HttpMessageNotReadableException e) {
+        log.warn("请求体解析失败：{}", e.getMessage());
+        return Result.fail(ErrorCode.PARAM, "请求体格式不正确，请检查 JSON");
+    }
+
+    /**
+     * 上传相关：没带文件、文件超过 multipart 限额。Spring 在进 Controller 之前就会抛，
+     * 必须在这里兜住，否则前端看到的是 500。
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public Result<Void> handleMultipart(org.springframework.web.multipart.MultipartException e) {
+        log.warn("上传被拒绝：{}", e.getMessage());
+        String msg = e.getMessage() != null && e.getMessage().contains("exceed")
+                ? "图片不能超过 5MB" : "请选择要上传的图片";
+        return Result.fail(ErrorCode.PARAM, msg);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
+    public Result<Void> handleMissingPart(org.springframework.web.multipart.support.MissingServletRequestPartException e) {
+        return Result.fail(ErrorCode.PARAM, "请选择要上传的图片（缺少 file 字段）");
+    }
+
     @ExceptionHandler(Exception.class)
     public Result<Void> handleOther(Exception e) {
         log.error("未处理异常", e);

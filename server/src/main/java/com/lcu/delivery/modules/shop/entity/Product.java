@@ -20,6 +20,10 @@ public class Product {
     /** 单位：分 */
     private Integer price;
     private Integer originPrice;
+    /** 限时特价（分），NULL/0 表示无特价；在 [specialStartAt, specialEndAt] 内按特价结算 */
+    private Integer specialPrice;
+    private LocalDateTime specialStartAt;
+    private LocalDateTime specialEndAt;
     /** -1 表示不限 */
     private Integer stock;
     private Integer sales;
@@ -44,7 +48,6 @@ public class Product {
     public Long getShopId() {
         return shopId;
     }
-
     public void setShopId(Long shopId) {
         this.shopId = shopId;
     }
@@ -87,6 +90,30 @@ public class Product {
 
     public void setPrice(Integer price) {
         this.price = price;
+    }
+
+    public Integer getSpecialPrice() {
+        return specialPrice;
+    }
+
+    public void setSpecialPrice(Integer specialPrice) {
+        this.specialPrice = specialPrice;
+    }
+
+    public LocalDateTime getSpecialStartAt() {
+        return specialStartAt;
+    }
+
+    public void setSpecialStartAt(LocalDateTime specialStartAt) {
+        this.specialStartAt = specialStartAt;
+    }
+
+    public LocalDateTime getSpecialEndAt() {
+        return specialEndAt;
+    }
+
+    public void setSpecialEndAt(LocalDateTime specialEndAt) {
+        this.specialEndAt = specialEndAt;
     }
 
     public Integer getOriginPrice() {

@@ -86,6 +86,7 @@ public class AuthService {
         }
         String openid = wechatClient.code2openid(appid, secret, code);
         User user = upsert(openid, null);
+        requireActive(user);
         return toResp(user);
     }
 
@@ -106,6 +107,7 @@ public class AuthService {
         user.setRole(normalized);
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);
+        requireActive(user);
         return toResp(user);
     }
 
@@ -124,8 +126,17 @@ public class AuthService {
         }
         String openid = "stu_" + IdentityService.sha256(no).substring(0, 24);
         User user = upsert(openid, "USER");
+        requireActive(user);
         identityService.verify(user.getId(), no);
         return toResp(user);
+    }
+
+    /** 被封禁的账号不允许登录（后台「封禁违规用户」要真的拦住入口，而不只是拦下单）。 */
+    private void requireActive(User user) {
+        Integer st = user.getStatus();
+        if (st != null && st == 0) {
+            throw new BizException(ErrorCode.FORBIDDEN, "账号已被封禁，如有疑问请联系平台客服");
+        }
     }
 
     private User upsert(String openid, String role) {

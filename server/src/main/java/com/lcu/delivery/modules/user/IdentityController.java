@@ -2,6 +2,7 @@ package com.lcu.delivery.modules.user;
 
 import com.lcu.delivery.common.Result;
 import com.lcu.delivery.common.UserContext;
+import com.lcu.delivery.modules.admin.SysConfigService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -16,15 +17,20 @@ import java.util.Map;
 public class IdentityController {
 
     private final IdentityService identityService;
+    private final SysConfigService config;
 
-    public IdentityController(IdentityService identityService) {
+    public IdentityController(IdentityService identityService, SysConfigService config) {
         this.identityService = identityService;
+        this.config = config;
     }
 
+    /** 顺便把前端要用到的平台开关一起下发，省一次请求。 */
     @GetMapping("/config")
     public Result<Map<String, Object>> config() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("required", identityService.required());
+        map.put("addressParse", config.getBool("feature.address_parse", true));
+        map.put("fenceEnforce", config.getBool("delivery.fence_enforce", true));
         return Result.ok(map);
     }
 

@@ -38,6 +38,16 @@ public class DeliveryController {
         return Result.ok(deliveryService.profile(UserContext.userId()));
     }
 
+    public record SettingsReq(Integer workStatus, Integer maxConcurrent, String workTime) {
+    }
+
+    /** 接单设置：是否开启接单 / 同时接单上限 / 可接单时段（需求 4.3.5） */
+    @PutMapping("/settings")
+    public Result<Map<String, Object>> settings(@RequestBody SettingsReq req) {
+        return Result.ok(deliveryService.updateSettings(UserContext.userId(),
+                req.workStatus(), req.maxConcurrent(), req.workTime()));
+    }
+
     @GetMapping("/pool")
     public Result<List<Map<String, Object>>> pool(@RequestParam(required = false) BigDecimal lng,
                                                   @RequestParam(required = false) BigDecimal lat) {
@@ -91,6 +101,12 @@ public class DeliveryController {
     @PostMapping("/orders/{id}/pickup")
     public Result<Void> pickup(@PathVariable Long id, @RequestBody(required = false) PhotoReq req) {
         deliveryService.pickup(UserContext.userId(), id, req == null ? null : req.photo());
+        return Result.ok();
+    }
+
+    @PostMapping("/orders/{id}/cancel")
+    public Result<Void> cancel(@PathVariable Long id) {
+        deliveryService.cancel(UserContext.userId(), id);
         return Result.ok();
     }
 

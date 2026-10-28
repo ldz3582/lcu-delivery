@@ -72,12 +72,12 @@ public class RiderFinanceService {
         m.put("balance", w == null ? 0 : w.getBalance());
         m.put("frozen", w == null ? 0 : w.getFrozen());
         m.put("totalIncome", walletId == 0 ? 0 : intOf(
-                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1", walletId));
+                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND biz_type = 'RIDER_SETTLE'", walletId));
         m.put("todayIncome", walletId == 0 ? 0 : intOf(
-                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND created_at >= ?",
+                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND biz_type = 'RIDER_SETTLE' AND created_at >= ?",
                 walletId, LocalDate.now().atStartOfDay()));
         m.put("monthIncome", walletId == 0 ? 0 : intOf(
-                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND created_at >= ?",
+                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND biz_type = 'RIDER_SETTLE' AND created_at >= ?",
                 walletId, LocalDate.now().withDayOfMonth(1).atStartOfDay()));
         m.put("totalPenalty", intOf(
                 "SELECT COALESCE(SUM(amount),0) FROM rider_penalty WHERE rider_id = ?", rider.getId()));

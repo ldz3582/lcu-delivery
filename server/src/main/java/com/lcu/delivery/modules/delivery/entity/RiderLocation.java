@@ -18,7 +18,6 @@ public class RiderLocation {
     private BigDecimal lng;
     private BigDecimal lat;
     private Integer accuracy;
-    private BigDecimal speed;
     private LocalDateTime reportedAt;
 
     public Long getId() {
@@ -69,13 +68,6 @@ public class RiderLocation {
         this.accuracy = accuracy;
     }
 
-    public BigDecimal getSpeed() {
-        return speed;
-    }
-
-    public void setSpeed(BigDecimal speed) {
-        this.speed = speed;
-    }
 
     public LocalDateTime getReportedAt() {
         return reportedAt;

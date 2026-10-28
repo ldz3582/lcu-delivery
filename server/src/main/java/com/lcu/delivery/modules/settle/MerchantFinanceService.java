@@ -73,12 +73,12 @@ public class MerchantFinanceService {
         m.put("frozen", w == null ? 0 : w.getFrozen());
         int walletId = w == null ? 0 : w.getId().intValue();
         m.put("totalIncome", walletId == 0 ? 0 : intOf(
-                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1", walletId));
+                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND biz_type = 'SHOP_SETTLE'", walletId));
         m.put("todayIncome", walletId == 0 ? 0 : intOf(
-                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND created_at >= ?",
+                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND biz_type = 'SHOP_SETTLE' AND created_at >= ?",
                 walletId, LocalDate.now().atStartOfDay()));
         m.put("monthIncome", walletId == 0 ? 0 : intOf(
-                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND created_at >= ?",
+                "SELECT COALESCE(SUM(amount),0) FROM wallet_flow WHERE wallet_id = ? AND direction = 1 AND biz_type = 'SHOP_SETTLE' AND created_at >= ?",
                 walletId, LocalDate.now().withDayOfMonth(1).atStartOfDay()));
         m.put("minWithdraw", config.getInt("settle.min_withdraw", 1000));
 
@@ -118,10 +118,6 @@ public class MerchantFinanceService {
                 .orderByDesc(Settlement::getId);
         Page<Settlement> p = settlementMapper.selectPage(new Page<>(page, Math.min(size, 50)), qw);
         List<Map<String, Object>> rows = new ArrayList<>();
-        int gmv = 0;
-        int commission = 0;
-        int income = 0;
-        int settled = 0;
         for (Settlement s : p.getRecords()) {
             Order o = s.getOrderId() == null ? null : orderMapper.selectById(s.getOrderId());
             Map<String, Object> m = new LinkedHashMap<>();
@@ -133,17 +129,23 @@ public class MerchantFinanceService {
             m.put("commission", s.getCommission());
             m.put("shopIncome", s.getShopIncome());
             m.put("status", s.getStatus());
-            m.put("statusText", s.getStatus() != null && s.getStatus() == 1 ? "已结算" : "待结算");
+            m.put("statusText", switch (s.getStatus() == null ? 0 : s.getStatus()) {
+                case 1 -> "已结算";
+                case 2 -> "已冲正";
+                default -> "待结算";
+            });
+            m.put("reverseReason", s.getReverseReason());
             m.put("createdAt", s.getCreatedAt() == null ? null : s.getCreatedAt().format(TS));
             m.put("settleAt", s.getSettleAt() == null ? null : s.getSettleAt().format(TS));
             rows.add(m);
-            gmv += s.getGoodsAmount() == null ? 0 : s.getGoodsAmount();
-            commission += s.getCommission() == null ? 0 : s.getCommission();
-            income += s.getShopIncome() == null ? 0 : s.getShopIncome();
-            if (s.getStatus() != null && s.getStatus() == 1) {
-                settled += s.getShopIncome() == null ? 0 : s.getShopIncome();
-            }
         }
+        // 汇总必须按「整段日期范围」统计，不能只累加当前页（否则换页/换 size 数字就变）
+        String where = " FROM settlement WHERE shop_id = ? AND created_at BETWEEN ? AND ? AND status <> 2";
+        Object[] args = {shop.getId(), start, end};
+        int gmv = intOf("SELECT COALESCE(SUM(goods_amount),0)" + where, args);
+        int commission = intOf("SELECT COALESCE(SUM(commission),0)" + where, args);
+        int income = intOf("SELECT COALESCE(SUM(shop_income),0)" + where, args);
+        int settled = intOf("SELECT COALESCE(SUM(shop_income),0)" + where + " AND status = 1", args);
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("gmv", gmv);
         summary.put("commission", commission);

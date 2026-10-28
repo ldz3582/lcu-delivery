@@ -13,10 +13,11 @@ public class User {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String openid;
-    private String unionid;
     private String nickname;
     private String avatar;
     private String phoneMask;
+    /** 手机号密文（AES-GCM），用于「加密存储」要求 */
+    private String phoneEnc;
     /** 学号/工号密文（AES-GCM），identity_status=1 表示已核验 */
     private String stuNoEnc;
     /** 学号/工号 SHA-256，用于查重 */
@@ -46,13 +47,6 @@ public class User {
         this.openid = openid;
     }
 
-    public String getUnionid() {
-        return unionid;
-    }
-
-    public void setUnionid(String unionid) {
-        this.unionid = unionid;
-    }
 
     public String getNickname() {
         return nickname;
@@ -96,6 +90,14 @@ public class User {
 
     public void setIdentityStatus(Integer identityStatus) {
         this.identityStatus = identityStatus;
+    }
+
+    public String getPhoneEnc() {
+        return phoneEnc;
+    }
+
+    public void setPhoneEnc(String phoneEnc) {
+        this.phoneEnc = phoneEnc;
     }
 
     public void setPhoneMask(String phoneMask) {

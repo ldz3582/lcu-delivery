@@ -14,6 +14,8 @@ public class Order {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String orderNo;
+    /** 前端幂等键：同用户同 token 只允许一单（唯一索引 uk_user_client_token） */
+    private String clientToken;
     private Long userId;
     private Long shopId;
     private Long riderId;
@@ -27,6 +29,8 @@ public class Order {
     private Integer packFee;
     private Integer deliveryFee;
     private Integer discountAmount;
+    /** 商家接单后用户取消产生的违约金（分），作为商家补偿 */
+    private Integer penaltyAmount;
     private Integer payAmount;
     private Integer commission;
     private Integer riderIncome;
@@ -59,6 +63,14 @@ public class Order {
 
     public void setOrderNo(String orderNo) {
         this.orderNo = orderNo;
+    }
+
+    public String getClientToken() {
+        return clientToken;
+    }
+
+    public void setClientToken(String clientToken) {
+        this.clientToken = clientToken;
     }
 
     public Long getUserId() {
@@ -155,6 +167,14 @@ public class Order {
 
     public void setDiscountAmount(Integer discountAmount) {
         this.discountAmount = discountAmount;
+    }
+
+    public Integer getPenaltyAmount() {
+        return penaltyAmount;
+    }
+
+    public void setPenaltyAmount(Integer penaltyAmount) {
+        this.penaltyAmount = penaltyAmount;
     }
 
     public Integer getPayAmount() {

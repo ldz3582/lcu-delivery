@@ -25,7 +25,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -255,7 +254,11 @@ public class AdminService {
             m.put("status", o.getStatus());
             m.put("statusText", OrderStatus.text(o.getStatus()));
             m.put("payAmount", o.getPayAmount());
+            m.put("deliveryFee", o.getDeliveryFee());
             m.put("commission", o.getCommission());
+            m.put("riderIncome", o.getRiderIncome());
+            m.put("shopIncome", o.getShopIncome());
+            m.put("penaltyAmount", o.getPenaltyAmount());
             m.put("createdAt", o.getCreatedAt());
             rows.add(m);
         }
@@ -271,6 +274,9 @@ public class AdminService {
         }
         if (s.getStatus() != null && s.getStatus() == 1) {
             throw new BizException(ErrorCode.ORDER_STATUS, "这单已经结算过了");
+        }
+        if (s.getStatus() != null && s.getStatus() == 2) {
+            throw new BizException(ErrorCode.ORDER_STATUS, "这单已因退款冲正，不能结算");
         }
         settlementService.settle(s);
     }
@@ -301,9 +307,5 @@ public class AdminService {
         jdbc.update("INSERT INTO fence (name, campus, polygon, status, created_at, updated_at) "
                 + "VALUES (?,?,ST_GeomFromText(?),1,NOW(),NOW())", name, campus, sb.toString());
         fenceService.reload();
-    }
-
-    public BigDecimal todayGmv() {
-        return BigDecimal.ZERO;
     }
 }

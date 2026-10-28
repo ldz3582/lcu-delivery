@@ -21,7 +21,6 @@ public class Payment {
     private String prepayId;
     private Integer profitSharing;
     private LocalDateTime paidAt;
-    private String raw;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -97,13 +96,6 @@ public class Payment {
         this.paidAt = paidAt;
     }
 
-    public String getRaw() {
-        return raw;
-    }
-
-    public void setRaw(String raw) {
-        this.raw = raw;
-    }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

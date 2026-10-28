@@ -48,6 +48,14 @@ public class ReviewController {
     public record ReplyReq(String reply) {
     }
 
+    /** 商家端：本店评价列表（可按是否已回复过滤），前端「评价管理」用 */
+    @GetMapping("/merchant/reviews")
+    public Result<PageResult<Map<String, Object>>> merchantList(@RequestParam(required = false) Boolean replied,
+                                                               @RequestParam(defaultValue = "1") int page,
+                                                               @RequestParam(defaultValue = "10") int size) {
+        return Result.ok(reviewService.merchantList(UserContext.userId(), replied, page, size));
+    }
+
     @PostMapping("/merchant/reviews/{id}/reply")
     public Result<Void> reply(@PathVariable Long id, @RequestBody ReplyReq req) {
         reviewService.reply(UserContext.userId(), id, req.reply());

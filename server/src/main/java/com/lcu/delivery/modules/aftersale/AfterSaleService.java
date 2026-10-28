@@ -50,16 +50,19 @@ public class AfterSaleService {
     private final ShopMapper shopMapper;
     private final UserMapper userMapper;
     private final PayService payService;
+    private final com.lcu.delivery.modules.admin.SysConfigService config;
     private final ObjectMapper json = new ObjectMapper();
 
     public AfterSaleService(AfterSaleMapper afterSaleMapper, OrderMapper orderMapper, OrderService orderService,
-                            ShopMapper shopMapper, UserMapper userMapper, PayService payService) {
+                            ShopMapper shopMapper, UserMapper userMapper, PayService payService,
+                            com.lcu.delivery.modules.admin.SysConfigService config) {
         this.afterSaleMapper = afterSaleMapper;
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.shopMapper = shopMapper;
         this.userMapper = userMapper;
         this.payService = payService;
+        this.config = config;
     }
 
     public record CreateReq(Long orderId, Integer type, String reason, Integer amount, List<String> images) {
@@ -92,6 +95,14 @@ public class AfterSaleService {
                     "订单送达后才能申请售后，当前状态：" + OrderStatus.text(order.getStatus())
                             + "（可先确认收货再申请）");
         }
+        // 售后受理期：订单完成后超过 order.complaint_days 天不再受理
+        int complaintDays = config.getInt("order.complaint_days", 3);
+        LocalDateTime doneAt = order.getFinishedAt() != null ? order.getFinishedAt()
+                : (order.getDeliveredAt() != null ? order.getDeliveredAt() : order.getUpdatedAt());
+        if (complaintDays > 0 && doneAt != null && doneAt.isBefore(LocalDateTime.now().minusDays(complaintDays))) {
+            throw new BizException(ErrorCode.ORDER_STATUS,
+                    "订单已完成超过 " + complaintDays + " 天，超出售后受理期，如有疑问请联系客服");
+        }
         int payAmount = order.getPayAmount() == null ? 0 : order.getPayAmount();
         int amount = req.amount() == null ? payAmount : req.amount();
         if (amount <= 0) {
@@ -117,8 +128,34 @@ public class AfterSaleService {
         return as.getId();
     }
 
-    public PageResult<Map<String, Object>> mine(Long userId, Integer status, int page, int size) {
-        Page<AfterSale> p = afterSaleMapper.selectPage(new Page<>(page, Math.min(size, 50)),
+    /**
+     * 系统自动建工单：商家拒单、接单超时、骑手取消等异常分支都要进后台人工处理池
+     * （需求第六章「异常分支全部进入售后工单」）。
+     */
+    @Transactional
+    public Long createSystem(Order order, int type, String reason, List<String> images) {
+        Long active = afterSaleMapper.selectCount(Wrappers.<AfterSale>lambdaQuery()
+                .eq(AfterSale::getOrderId, order.getId())
+                .in(AfterSale::getStatus, PENDING, PROCESSING));
+        if (active != null && active > 0) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        AfterSale as = new AfterSale();
+        as.setOrderId(order.getId());
+        as.setUserId(order.getUserId());
+        as.setType(type);
+        as.setReason(reason);
+        as.setImages(toJson(images));
+        as.setAmount(order.getPayAmount() == null ? 0 : order.getPayAmount());
+        as.setStatus(PENDING);
+        as.setCreatedAt(now);
+        as.setUpdatedAt(now);
+        afterSaleMapper.insert(as);
+        return as.getId();
+    }
+
+    public PageResult<Map<String, Object>> mine(Long userId, Integer status, int page, int size) {        Page<AfterSale> p = afterSaleMapper.selectPage(new Page<>(page, Math.min(size, 50)),
                 Wrappers.<AfterSale>lambdaQuery()
                         .eq(AfterSale::getUserId, userId)
                         .eq(status != null, AfterSale::getStatus, status)
@@ -233,14 +270,28 @@ public class AfterSaleService {
     /**
      * 统一结案：退款/驳回都要把工单与订单状态对齐。
      * 全额退 → 订单 80；部分退 → 订单回 50，只记为部分赔付。
+     *
+     * 特别注意「系统自动工单」（商家拒单 / 接单超时 等）：下单时钱就已经退过了、订单已是 80，
+     * 这类工单只是留给后台复核责任，**不能再退一次钱，也不能把订单改回已完成**。
      */
     private void settle(AfterSale as, Order order, boolean approve, int amount,
                         int liableParty, String remark, Long operatorId) {
         int payAmount = order.getPayAmount() == null ? 0 : order.getPayAmount();
+        boolean alreadyRefunded = order.getStatus() != null && order.getStatus() == OrderStatus.REFUNDED;
+        if (alreadyRefunded) {
+            // 钱早就退了：工单只做结论，不动订单状态、不动钱包
+            as.setStatus(approve ? REFUNDED : REJECTED);
+            as.setJudgeRemark((approve ? "确认已退款（系统已自动退款，无需二次退款）：" : "复核不通过（订单已退款，状态不变）：") + remark);
+            as.setLiableParty(liableParty);
+            as.setOperatorId(operatorId);
+            as.setUpdatedAt(LocalDateTime.now());
+            afterSaleMapper.updateById(as);
+            return;
+        }
         if (approve) {
             if (amount >= payAmount) {
+                // refundByOperator 内部已把订单置为「已退款」并写流水，这里不要再 updateStatus 一次（会重复写时间轴）
                 payService.refundByOperator(order.getId(), amount, remark, 5, operatorId);
-                orderService.updateStatus(order, OrderStatus.REFUNDED, "售后退款：" + remark);
             } else {
                 payService.refundPartial(order.getId(), amount, remark, 5, operatorId);
                 orderService.updateStatus(order, OrderStatus.FINISHED, "部分退款 " + money(amount) + " 元：" + remark);
@@ -259,7 +310,10 @@ public class AfterSaleService {
 
     private void close(AfterSale as, int status, Long operatorId, String remark) {
         Order order = orderService.require(as.getOrderId());
-        orderService.updateStatus(order, OrderStatus.FINISHED, remark);
+        // 系统自动工单（订单已退款）撤销时，不能把订单改回「已完成」
+        if (order.getStatus() == null || order.getStatus() != OrderStatus.REFUNDED) {
+            orderService.updateStatus(order, OrderStatus.FINISHED, remark);
+        }
         as.setStatus(status);
         as.setJudgeRemark(remark);
         as.setOperatorId(operatorId);

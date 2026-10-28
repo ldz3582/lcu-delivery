@@ -37,11 +37,19 @@ public class ShopController {
 
     @GetMapping("/shops/{id}")
     public Result<Map<String, Object>> detail(@PathVariable Long id) {
-        return Result.ok(shopService.detail(id));
+        // 公开接口：登录了就带上 userId，用于标记店铺券「已领」
+        com.lcu.delivery.common.AuthUser u = com.lcu.delivery.common.UserContext.get();
+        return Result.ok(shopService.detail(id, u == null ? null : u.id()));
     }
 
     @GetMapping("/shops/{id}/products")
     public Result<List<Map<String, Object>>> products(@PathVariable Long id) {
         return Result.ok(shopService.products(id));
+    }
+
+    /** 首页「限时特价」专区 */
+    @GetMapping("/specials")
+    public Result<List<Map<String, Object>>> specials(@RequestParam(defaultValue = "10") int limit) {
+        return Result.ok(shopService.specials(limit));
     }
 }

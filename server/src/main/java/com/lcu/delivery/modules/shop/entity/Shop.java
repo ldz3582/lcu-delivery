@@ -25,6 +25,14 @@ public class Shop {
     /** 0 休息 1 营业 */
     private Integer bizStatus;
     private String openTime;
+    /** 店铺公告 */
+    private String notice;
+    /** 1 接收订单/消息推送 0 关闭 */
+    private Integer pushEnabled;
+    /** 配送范围（米），NULL=跟随平台 */
+    private Integer deliveryRangeMeters;
+    /** 累计拒单次数（达到 merchant.reject_limit 自动暂停营业） */
+    private Integer rejectCount;
     private Integer minAmount;
     private Integer packFee;
     private Integer deliveryFee;
@@ -138,6 +146,38 @@ public class Shop {
 
     public void setOpenTime(String openTime) {
         this.openTime = openTime;
+    }
+
+    public String getNotice() {
+        return notice;
+    }
+
+    public void setNotice(String notice) {
+        this.notice = notice;
+    }
+
+    public Integer getPushEnabled() {
+        return pushEnabled;
+    }
+
+    public void setPushEnabled(Integer pushEnabled) {
+        this.pushEnabled = pushEnabled;
+    }
+
+    public Integer getDeliveryRangeMeters() {
+        return deliveryRangeMeters;
+    }
+
+    public void setDeliveryRangeMeters(Integer deliveryRangeMeters) {
+        this.deliveryRangeMeters = deliveryRangeMeters;
+    }
+
+    public Integer getRejectCount() {
+        return rejectCount;
+    }
+
+    public void setRejectCount(Integer rejectCount) {
+        this.rejectCount = rejectCount;
     }
 
     public Integer getMinAmount() {

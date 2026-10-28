@@ -260,7 +260,29 @@ public class DeliveryService {
         if (rider.getAuditStatus() != 1) {
             throw new BizException(ErrorCode.FORBIDDEN, "骑手资质审核中，暂不能接单");
         }
+        Integer st = rider.getStatus();
+        if (st != null && st == 0) {
+            throw new BizException(ErrorCode.FORBIDDEN, "骑手账号已被封禁，暂不能接单");
+        }
         return rider;
+    }
+
+    /** 接单设置：开启/关闭接单、同时接单上限、可接单时段。 */
+    public Map<String, Object> updateSettings(Long userId, Integer workStatus, Integer maxConcurrent, String workTime) {
+        Rider rider = requireByUser(userId);
+        if (workStatus != null) {
+            // 0=离线 1=接单中 2=忙碌：前端传 1 表示"开启接单"，就该落 1，不能写成 2
+            rider.setWorkStatus(workStatus == 1 ? 1 : 0);
+        }
+        if (maxConcurrent != null) {
+            rider.setMaxConcurrent(Math.min(Math.max(maxConcurrent, 1), 10));
+        }
+        if (workTime != null) {
+            rider.setWorkTime(workTime);
+        }
+        rider.setUpdatedAt(LocalDateTime.now());
+        riderMapper.updateById(rider);
+        return profile(userId);
     }
 
     public Map<String, Object> profile(Long userId) {
@@ -272,6 +294,7 @@ public class DeliveryService {
         m.put("score", r.getScore());
         m.put("totalOrders", r.getTotalOrders());
         m.put("maxConcurrent", r.getMaxConcurrent());
+        m.put("workTime", r.getWorkTime());
         m.put("phoneMask", r.getPhoneMask());
         return m;
     }
@@ -286,11 +309,25 @@ public class DeliveryService {
                 .last("limit 50"));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Order o : orders) {
+            // 店铺被注销/软删后，这单不该再出现在抢单大厅；
+            // 但不能因为一条脏数据把整个大厅打成 404（曾出现过）
+            String shopName = shopService.nameOrNull(o.getShopId());
+            Shop poolShop = null;
+            if (shopName != null) {
+                try {
+                    poolShop = shopService.require(o.getShopId());
+                } catch (Exception ignored) {
+                    poolShop = null;
+                }
+            }
+            if (poolShop == null) {
+                // 店铺被注销/不可用：跳过该单，但不能让整个大厅失败
+                continue;
+            }
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("orderId", o.getId());
             m.put("orderNo", o.getOrderNo());
-            Shop poolShop = shopService.require(o.getShopId());
-            m.put("shopName", poolShop.getName());
+            m.put("shopName", shopName);
             m.put("shopLng", poolShop.getLng());
             m.put("shopLat", poolShop.getLat());
             m.put("deliveryFee", o.getDeliveryFee());
@@ -343,9 +380,45 @@ public class DeliveryService {
         }
     }
 
+    /**
+     * 骑手取消配送（需求 4.3 / 第六章异常分支）：
+     *  - 未取餐（30）：释放回抢单池，其它骑手可继续接
+     *  - 已取餐（40）：不允许直接取消，须走异常上报 + 售后工单，避免餐品无人负责
+     */
     @Transactional
-    public void pickup(Long userId, Long orderId, String photo) {
-        if (photo == null || photo.isBlank()) {
+    public void cancel(Long userId, Long orderId) {
+        Rider rider = requireByUser(userId);
+        Order order = orderService.require(orderId);
+        if (!rider.getId().equals(order.getRiderId())) {
+            throw new BizException(ErrorCode.FORBIDDEN, "不是你的订单");
+        }
+        int status = order.getStatus() == null ? -1 : order.getStatus();
+        if (status == OrderStatus.DELIVERING) {
+            throw new BizException(ErrorCode.ORDER_STATUS, "已取餐不能直接取消，请用「异常上报」联系后台处理");
+        }
+        if (status != OrderStatus.WAIT_PICKUP) {
+            throw new BizException(ErrorCode.ORDER_STATUS, "当前状态不可取消配送（" + OrderStatus.text(status) + "）");
+        }
+        // 释放回抢单池
+        order.setRiderId(null);
+        order.setUpdatedAt(LocalDateTime.now());
+        orderMapper.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<Order>lambdaUpdate()
+                .eq(Order::getId, orderId)
+                .set(Order::getRiderId, null)
+                .set(Order::getUpdatedAt, LocalDateTime.now()));
+        DeliveryTask task = taskMapper.selectOne(Wrappers.<DeliveryTask>lambdaQuery()
+                .eq(DeliveryTask::getOrderId, orderId).last("limit 1"));
+        if (task != null) {
+            task.setRiderId(null);
+            task.setStatus(4);
+            task.setUpdatedAt(LocalDateTime.now());
+            taskMapper.updateById(task);
+        }
+        orderService.log(orderId, status, status, 3, rider.getId(), "骑手取消配送，订单退回抢单池");
+    }
+
+    @Transactional
+    public void pickup(Long userId, Long orderId, String photo) {        if (photo == null || photo.isBlank()) {
             throw new BizException(ErrorCode.PARAM, "请先拍取餐照片");
         }
         Rider rider = requireByUser(userId);
@@ -386,8 +459,8 @@ public class DeliveryService {
         task.setDeliverPhoto(photo);
         task.setUpdatedAt(LocalDateTime.now());
         taskMapper.updateById(task);
-        rider.setTotalOrders(rider.getTotalOrders() == null ? 1 : rider.getTotalOrders() + 1);
-        riderMapper.updateById(rider);
+        // 注意：累计单量/超时单数已在 jdbcRunner 里更新过，这里不能再拿旧对象覆盖，
+        // 否则 timeout_orders 会被写回 0（超时率统计失真）。
     }
 
     public List<Map<String, Object>> myOrders(Long userId, Integer status) {
@@ -399,17 +472,19 @@ public class DeliveryService {
                 .last("limit 50"));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Order o : orders) {
-            Shop shop = shopService.require(o.getShopId());
+            // 店铺被注销时也要能看历史配送单，只是店名显示为空
+            String shopName = shopService.nameOrNull(o.getShopId());
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("orderId", o.getId());
             m.put("orderNo", o.getOrderNo());
             m.put("status", o.getStatus());
             m.put("statusText", OrderStatus.text(o.getStatus()));
             m.put("shopId", o.getShopId());
-            m.put("shopName", shop.getName());
-            m.put("shopLng", shop.getLng());
-            m.put("shopLat", shop.getLat());
+            m.put("shopName", shopName);
+            m.put("shopLng", null);
+            m.put("shopLat", null);
             m.put("address", o.getAddressJson());
+            m.put("remark", o.getRemark());
             m.put("lng", o.getLng());
             m.put("lat", o.getLat());
             m.put("riderIncome", o.getRiderIncome());
@@ -523,7 +598,7 @@ public class DeliveryService {
             m.put("id", inc.getId());
             m.put("orderId", inc.getOrderId());
             m.put("orderNo", o == null ? null : o.getOrderNo());
-            m.put("shopName", o == null ? null : shopService.require(o.getShopId()).getName());
+            m.put("shopName", o == null ? null : shopService.nameOrNull(o.getShopId()));
             m.put("type", inc.getType());
             m.put("typeText", switch (inc.getType() == null ? 4 : inc.getType()) {
                 case 1 -> "联系不上用户";

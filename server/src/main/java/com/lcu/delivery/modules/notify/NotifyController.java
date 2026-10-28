@@ -1,7 +1,6 @@
 package com.lcu.delivery.modules.notify;
 
 import com.lcu.delivery.common.Result;
-import com.lcu.delivery.common.UserContext;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

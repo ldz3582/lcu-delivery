@@ -131,6 +131,26 @@ public class ReviewService {
         return toRows(List.of(r)).get(0);
     }
 
+    /** 商家端评价列表：自己店铺的评价（含未回复标记），用于「评价管理 + 回复」。 */
+    public PageResult<Map<String, Object>> merchantList(Long userId, Boolean replied, int page, int size) {
+        Shop shop = shopMapper.selectOne(Wrappers.<Shop>lambdaQuery().eq(Shop::getOwnerUserId, userId));
+        if (shop == null) {
+            throw new BizException(ErrorCode.FORBIDDEN, "还没有店铺");
+        }
+        var qw = Wrappers.<Review>lambdaQuery()
+                .eq(Review::getShopId, shop.getId())
+                .orderByDesc(Review::getId);
+        if (replied != null) {
+            if (replied) {
+                qw.isNotNull(Review::getReply);
+            } else {
+                qw.and(w -> w.isNull(Review::getReply).or().eq(Review::getReply, ""));
+            }
+        }
+        Page<Review> p = reviewMapper.selectPage(new Page<>(page, Math.min(size, 50)), qw);
+        return new PageResult<>(toRows(p.getRecords()), p.getTotal(), page, size);
+    }
+
     /** 商家回复：只能回自己店铺的评价。 */
     public void reply(Long userId, Long reviewId, String reply) {
         if (reply == null || reply.isBlank()) {

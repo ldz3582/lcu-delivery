@@ -2,6 +2,7 @@ package com.lcu.delivery.modules.cart;
 
 import com.lcu.delivery.common.BizException;
 import com.lcu.delivery.common.ErrorCode;
+import com.lcu.delivery.modules.admin.SysConfigService;
 import com.lcu.delivery.modules.coupon.CouponService;
 import com.lcu.delivery.modules.shop.ShopService;
 import com.lcu.delivery.modules.shop.entity.Product;
@@ -25,13 +26,15 @@ public class CartService {
     private final ShopService shopService;
     private final CouponService couponService;
     private final ProductSkuMapper skuMapper;
+    private final SysConfigService config;
 
     public CartService(ProductMapper productMapper, ShopService shopService, CouponService couponService,
-                       ProductSkuMapper skuMapper) {
+                       ProductSkuMapper skuMapper, SysConfigService config) {
         this.productMapper = productMapper;
         this.shopService = shopService;
         this.couponService = couponService;
         this.skuMapper = skuMapper;
+        this.config = config;
     }
 
     public record Item(Long productId, Long skuId, Integer qty) {
@@ -98,7 +101,7 @@ public class CartService {
                 if (p.getStock() != null && p.getStock() >= 0 && p.getStock() < it.qty()) {
                     throw new BizException(ErrorCode.STOCK, p.getName() + " 库存不足");
                 }
-                price = p.getPrice();
+                price = effectivePrice(p);
             }
             int subtotal = price * it.qty();
             goods += subtotal;
@@ -106,7 +109,7 @@ public class CartService {
         }
 
         int pack = shop.getPackFee() == null ? 0 : shop.getPackFee();
-        int delivery = shop.getDeliveryFee() == null ? 0 : shop.getDeliveryFee();
+        int delivery = deliveryFeeOf(shop);
 
         CouponService.Applied applied = null;
         if (userCouponId != null) {
@@ -123,5 +126,41 @@ public class CartService {
                 applied == null ? null : applied.userCouponId(),
                 applied == null ? null : applied.couponId(),
                 applied == null ? null : applied.name());
+    }
+
+    /** 菜品实际成交单价：命中限时特价时段就按特价，否则原价。 */
+    public static int effectivePrice(Product p) {
+        Integer sp = p.getSpecialPrice();
+        if (sp == null || sp <= 0) {
+            return p.getPrice() == null ? 0 : p.getPrice();
+        }
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        if (p.getSpecialStartAt() != null && now.isBefore(p.getSpecialStartAt())) {
+            return p.getPrice() == null ? 0 : p.getPrice();
+        }
+        if (p.getSpecialEndAt() != null && now.isAfter(p.getSpecialEndAt())) {
+            return p.getPrice() == null ? 0 : p.getPrice();
+        }
+        return sp;
+    }
+
+    /** 特价是否正在生效（前端打「限时特价」标签用）。 */
+    public static boolean specialActive(Product p) {
+        return p.getSpecialPrice() != null && p.getSpecialPrice() > 0 && effectivePrice(p) == p.getSpecialPrice();
+    }
+
+    /**
+     * 配送费取值规则（后台可配）：
+     *  - delivery.fee_mode = platform：全平台统一用 delivery.base_fee
+     *  - delivery.fee_mode = shop（默认）：按店铺 delivery_fee，店铺没设则用平台 base_fee
+     */
+    public int deliveryFeeOf(Shop shop) {
+        int base = config.getInt("delivery.base_fee", 200);
+        String mode = config.get("delivery.fee_mode", "shop");
+        if ("platform".equalsIgnoreCase(mode)) {
+            return base;
+        }
+        Integer shopFee = shop.getDeliveryFee();
+        return shopFee == null || shopFee <= 0 ? base : shopFee;
     }
 }

@@ -50,7 +50,43 @@ public class MerchantController {
         m.put("packFee", s.getPackFee());
         m.put("deliveryFee", s.getDeliveryFee());
         m.put("commissionRate", s.getCommissionRate());
+        m.put("notice", s.getNotice());
+        m.put("pushEnabled", s.getPushEnabled());
+        m.put("deliveryRangeMeters", s.getDeliveryRangeMeters());
+        m.put("rejectCount", s.getRejectCount());
         return Result.ok(m);
+    }
+
+    /** 库存预警：0 库存或低于阈值的在售菜品 */
+    @GetMapping("/stock-alerts")
+    public Result<List<Map<String, Object>>> stockAlerts(@RequestParam(required = false) Integer threshold) {
+        return Result.ok(merchantService.stockAlerts(UserContext.userId(), threshold));
+    }
+
+    // ---------- 菜品分类管理（需求 4.2.2） ----------
+
+    @GetMapping("/categories")
+    public Result<List<Map<String, Object>>> categories() {
+        return Result.ok(merchantService.categories(UserContext.userId()));
+    }
+
+    public record CategoryReq(String name, Integer sort) {
+    }
+
+    @PostMapping("/categories")
+    public Result<Map<String, Object>> createCategory(@RequestBody CategoryReq req) {
+        return Result.ok(merchantService.saveCategory(UserContext.userId(), null, req.name(), req.sort()));
+    }
+
+    @PutMapping("/categories/{id}")
+    public Result<Map<String, Object>> updateCategory(@PathVariable Long id, @RequestBody CategoryReq req) {
+        return Result.ok(merchantService.saveCategory(UserContext.userId(), id, req.name(), req.sort()));
+    }
+
+    @DeleteMapping("/categories/{id}")
+    public Result<Void> deleteCategory(@PathVariable Long id) {
+        merchantService.deleteCategory(UserContext.userId(), id);
+        return Result.ok();
     }
 
     @PutMapping("/shop")
@@ -64,6 +100,12 @@ public class MerchantController {
                                                           @RequestParam(defaultValue = "1") int page,
                                                           @RequestParam(defaultValue = "10") int size) {
         return Result.ok(merchantService.orders(UserContext.userId(), status, page, size));
+    }
+
+    /** 商家订单详情（含商品清单、金额明细），补充 4.2.3 缺口 */
+    @GetMapping("/orders/{id}")
+    public Result<Map<String, Object>> orderDetail(@PathVariable Long id) {
+        return Result.ok(merchantService.orderDetail(UserContext.userId(), id));
     }
 
     public record RejectReq(String reason) {

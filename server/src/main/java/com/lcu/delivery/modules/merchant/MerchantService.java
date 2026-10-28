@@ -3,8 +3,10 @@ package com.lcu.delivery.modules.merchant;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lcu.delivery.common.BizException;
+import com.lcu.delivery.common.CacheService;
 import com.lcu.delivery.common.ErrorCode;
 import com.lcu.delivery.common.PageResult;
+import com.lcu.delivery.modules.admin.SysConfigService;
 import com.lcu.delivery.modules.delivery.DispatchService;
 import com.lcu.delivery.modules.order.OrderService;
 import com.lcu.delivery.modules.order.OrderStatus;
@@ -39,10 +41,14 @@ public class MerchantService {
     private final OrderService orderService;
     private final UserService userService;
     private final DispatchService dispatchService;
+    private final SysConfigService config;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private final CacheService cache;
 
     public MerchantService(ShopMapper shopMapper, ProductMapper productMapper, ProductSkuMapper skuMapper,
                            OrderMapper orderMapper, OrderService orderService, UserService userService,
-                           DispatchService dispatchService) {
+                           DispatchService dispatchService, SysConfigService config,
+                           org.springframework.jdbc.core.JdbcTemplate jdbc, CacheService cache) {
         this.dispatchService = dispatchService;
         this.skuMapper = skuMapper;
         this.shopMapper = shopMapper;
@@ -50,6 +56,27 @@ public class MerchantService {
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.userService = userService;
+        this.config = config;
+        this.jdbc = jdbc;
+        this.cache = cache;
+    }
+
+    /** 抽佣默认值：校内（食堂/饮品/超市）按 commission.rate_campus，校外小吃街(category=2)按 commission.rate_off_campus。 */
+    /** 字段长度统一校验：避免超长内容打到数据库里变成 500。 */
+    private void checkLen(String v, int max, String label) {
+        if (v != null && v.trim().length() > max) {
+            throw new BizException(ErrorCode.PARAM, label + "最多 " + max + " 个字符");
+        }
+    }
+
+    private BigDecimal defaultCommission(Long categoryId) {
+        String key = (categoryId != null && categoryId == 2L) ? "commission.rate_off_campus" : "commission.rate_campus";
+        String def = (categoryId != null && categoryId == 2L) ? "0.1000" : "0.0600";
+        try {
+            return new BigDecimal(config.get(key, def)).setScale(4, java.math.RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            return new BigDecimal(def);
+        }
     }
 
     public record ApplyReq(String name, String logo, Long categoryId, Integer campus, String address,
@@ -82,9 +109,29 @@ public class MerchantService {
         if (req.name() == null || req.name().isBlank()) {
             throw new BizException(ErrorCode.PARAM, "请填写店铺名称");
         }
+        // 资质与坐标是硬门槛（需求 4.2.1 / 9.1「无证一律禁止入驻」）
+        if (req.contactPhone() == null || req.contactPhone().isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "请填写负责人手机号");
+        }
+        if (req.lng() == null || req.lat() == null) {
+            throw new BizException(ErrorCode.PARAM, "请在地图上标记门店位置");
+        }
+        if (req.licenseUrl() == null || req.licenseUrl().isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "请上传营业执照");
+        }
+        if (req.permitUrl() == null || req.permitUrl().isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "请上传食品经营许可证");
+        }
+        if (req.photos() == null || req.photos().isEmpty()) {
+            throw new BizException(ErrorCode.PARAM, "请至少上传 1 张门店照片");
+        }
+        checkLen(req.name(), 64, "店铺名称");
+        if (req.address() != null) {
+            checkLen(req.address(), 255, "店铺地址");
+        }
         Shop shop = new Shop();
         shop.setOwnerUserId(userId);
-        shop.setName(req.name());
+        shop.setName(req.name().trim());
         shop.setLogo(req.logo());
         shop.setCategoryId(req.categoryId() == null ? 1L : req.categoryId());
         shop.setCampus(req.campus() == null ? 1 : req.campus());
@@ -99,8 +146,11 @@ public class MerchantService {
         shop.setOpenTime("10:30-13:30,16:30-19:30");
         shop.setMinAmount(0);
         shop.setPackFee(0);
-        shop.setDeliveryFee(200);
-        shop.setCommissionRate(new BigDecimal("0.0600"));
+        shop.setDeliveryFee(config.getInt("delivery.base_fee", 200));
+        // 抽佣按商户类型差异化：校外小吃街(category=2) 高于校内食堂/超市
+        shop.setCommissionRate(defaultCommission(shop.getCategoryId()));
+        shop.setRejectCount(0);
+        shop.setPushEnabled(1);
         shop.setScore(new BigDecimal("5.00"));
         shop.setMonthSales(0);
         shop.setAuditStatus(0);
@@ -146,6 +196,7 @@ public class MerchantService {
             productMapper.updateById(p);
         }
         refreshMinSkuPrice(p.getId());
+        evictShopCache();
         return sku;
     }
 
@@ -166,6 +217,7 @@ public class MerchantService {
         if (req.getStatus() != null) sku.setStatus(req.getStatus());
         skuMapper.updateById(sku);
         refreshMinSkuPrice(sku.getProductId());
+        evictShopCache();
         return sku;
     }
 
@@ -189,6 +241,7 @@ public class MerchantService {
         } else {
             refreshMinSkuPrice(sku.getProductId());
         }
+        evictShopCache();
     }
 
     private Product requireOwnProduct(Shop shop, Long productId) {
@@ -339,14 +392,154 @@ public class MerchantService {
             shop.setDeliveryFee(((Number) body.get("deliveryFee")).intValue());
         }
         if (body.containsKey("name")) {
-            shop.setName(String.valueOf(body.get("name")));
+            String n = String.valueOf(body.get("name"));
+            checkLen(n, 64, "店铺名称");
+            shop.setName(n);
         }
         if (body.containsKey("logo")) {
             shop.setLogo(String.valueOf(body.get("logo")));
         }
+        // 店铺公告 / 接收消息推送 / 配送范围（需求 4.2.6、4.2.1）
+        if (body.containsKey("notice")) {
+            String notice = body.get("notice") == null ? null : String.valueOf(body.get("notice"));
+            checkLen(notice, 500, "店铺公告");
+            shop.setNotice(notice);
+        }
+        if (body.containsKey("pushEnabled")) {
+            shop.setPushEnabled(((Number) body.get("pushEnabled")).intValue());
+        }
+        if (body.containsKey("deliveryRangeMeters")) {
+            Object v = body.get("deliveryRangeMeters");
+            shop.setDeliveryRangeMeters(v == null ? null : ((Number) v).intValue());
+        }
         shop.setUpdatedAt(LocalDateTime.now());
         shopMapper.updateById(shop);
+        // updateById 跳过 null：要「清空配送范围」必须显式写 NULL，否则前端传 null 读回来还是旧值
+        if (body.containsKey("deliveryRangeMeters") && body.get("deliveryRangeMeters") == null) {
+            shopMapper.update(null, Wrappers.<Shop>lambdaUpdate()
+                    .eq(Shop::getId, shop.getId())
+                    .set(Shop::getDeliveryRangeMeters, null)
+                    .set(Shop::getUpdatedAt, LocalDateTime.now()));
+            shop.setDeliveryRangeMeters(null);
+        }
         return shop;
+    }
+
+    /** 商家订单详情：商品清单 + 金额明细（需求 4.2.3「订单详情」）。 */
+    public Map<String, Object> orderDetail(Long userId, Long orderId) {
+        Shop shop = requireShop(userId);
+        Order o = orderMapper.selectById(orderId);
+        if (o == null || !shop.getId().equals(o.getShopId())) {
+            throw new BizException(ErrorCode.NOT_FOUND, "订单不存在");
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", o.getId());
+        m.put("orderNo", o.getOrderNo());
+        m.put("status", o.getStatus());
+        m.put("statusText", OrderStatus.text(o.getStatus()));
+        m.put("address", o.getAddressJson());
+        m.put("remark", o.getRemark());
+        m.put("goodsAmount", o.getGoodsAmount());
+        m.put("packFee", o.getPackFee());
+        m.put("deliveryFee", o.getDeliveryFee());
+        m.put("discountAmount", o.getDiscountAmount());
+        m.put("payAmount", o.getPayAmount());
+        m.put("commission", o.getCommission());
+        m.put("shopIncome", o.getShopIncome());
+        m.put("createdAt", o.getCreatedAt());
+        m.put("paidAt", o.getPaidAt());
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (Map<String, Object> r : jdbc.queryForList(
+                "SELECT name, price, qty, subtotal FROM order_item WHERE order_id = ? ORDER BY id", orderId)) {
+            Map<String, Object> it = new LinkedHashMap<>();
+            it.put("name", r.get("name"));
+            it.put("price", r.get("price"));
+            it.put("qty", r.get("qty"));
+            it.put("subtotal", r.get("subtotal"));
+            items.add(it);
+        }
+        m.put("items", items);
+        return m;
+    }
+
+    // ---------- 菜品分类管理（需求 4.2.2） ----------
+    public List<Map<String, Object>> categories(Long userId) {
+        Shop shop = requireShop(userId);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<String, Object> r : jdbc.queryForList(
+                "SELECT c.id, c.name, c.sort, (SELECT COUNT(*) FROM product p WHERE p.category_id = c.id "
+                        + "AND p.deleted_at IS NULL) products FROM product_category c WHERE c.shop_id = ? "
+                        + "ORDER BY c.sort ASC, c.id ASC", shop.getId())) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", r.get("id"));
+            m.put("name", r.get("name"));
+            m.put("sort", r.get("sort"));
+            m.put("productCount", r.get("products"));
+            rows.add(m);
+        }
+        return rows;
+    }
+
+    @Transactional
+    public Map<String, Object> saveCategory(Long userId, Long id, String name, Integer sort) {
+        Shop shop = requireShop(userId);
+        if (name == null || name.isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "分类名称不能为空");
+        }
+        if (id == null) {
+            jdbc.update("INSERT INTO product_category (shop_id, name, sort) VALUES (?,?,?)",
+                    shop.getId(), name.trim(), sort == null ? 0 : sort);
+            id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        } else {
+            Integer own = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM product_category WHERE id = ? AND shop_id = ?", Integer.class, id, shop.getId());
+            if (own == null || own == 0) {
+                throw new BizException(ErrorCode.NOT_FOUND, "分类不存在");
+            }
+            jdbc.update("UPDATE product_category SET name = ?, sort = ? WHERE id = ?",
+                    name.trim(), sort == null ? 0 : sort, id);
+        }
+        return Map.of("id", id, "name", name.trim(), "sort", sort == null ? 0 : sort);
+    }
+
+    @Transactional
+    public void deleteCategory(Long userId, Long id) {
+        Shop shop = requireShop(userId);
+        Integer own = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM product_category WHERE id = ? AND shop_id = ?", Integer.class, id, shop.getId());
+        if (own == null || own == 0) {
+            throw new BizException(ErrorCode.NOT_FOUND, "分类不存在");
+        }
+        Integer used = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM product WHERE category_id = ? AND deleted_at IS NULL", Integer.class, id);
+        if (used != null && used > 0) {
+            throw new BizException(ErrorCode.PARAM, "该分类下还有 " + used + " 个菜品，请先移走再删除");
+        }
+        jdbc.update("DELETE FROM product_category WHERE id = ?", id);
+    }
+
+    /** 菜品/店铺改动后清掉 Redis 里的商品快照，避免用户端 60 秒内看到旧价格/旧库存。 */
+    private void evictShopCache() {
+        cache.evictPrefix("shop:products:");
+    }
+
+    /** 库存预警：库存为 0 或低于阈值的在售菜品（需求 4.2.2）。 */    public List<Map<String, Object>> stockAlerts(Long userId, Integer threshold) {
+        Shop shop = requireShop(userId);
+        int t = threshold == null ? 5 : Math.max(0, threshold);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<String, Object> r : jdbc.queryForList(
+                "SELECT id, name, stock, status FROM product WHERE shop_id = ? AND deleted_at IS NULL "
+                        + "AND stock >= 0 AND stock <= ? ORDER BY stock ASC, id ASC", shop.getId(), t)) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("productId", r.get("id"));
+            m.put("name", r.get("name"));
+            m.put("stock", r.get("stock"));
+            m.put("status", r.get("status"));
+            m.put("statusText", ((Number) r.get("status")).intValue() == 1 ? "在售" : "已下架");
+            m.put("soldOut", ((Number) r.get("stock")).intValue() == 0);
+            rows.add(m);
+        }
+        return rows;
     }
 
     public PageResult<Map<String, Object>> orders(Long userId, Integer status, int page, int size) {
@@ -402,6 +595,14 @@ public class MerchantService {
 
     public Product createProduct(Long userId, Product req) {
         Shop shop = requireShop(userId);
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "请填写菜品名称");
+        }
+        checkLen(req.getName(), 64, "菜品名称");
+        checkLen(req.getDescription(), 500, "菜品描述");
+        if (req.getImage() != null) {
+            checkLen(req.getImage(), 512, "图片地址");
+        }
         Product p = new Product();
         p.setShopId(shop.getId());
         p.setCategoryId(req.getCategoryId() == null ? 1L : req.getCategoryId());
@@ -414,11 +615,21 @@ public class MerchantService {
         p.setSales(0);
         p.setHasSku(req.getHasSku() == null ? 0 : req.getHasSku());
         p.setComboItems(normalizeCombo(req.getComboItems()));
+        if (req.getSpecialPrice() != null && req.getSpecialPrice() > 0) {
+            int origin = req.getPrice() == null ? 0 : req.getPrice();
+            if (req.getSpecialPrice() >= origin) {
+                throw new BizException(ErrorCode.PARAM, "特价必须低于原价");
+            }
+            p.setSpecialPrice(req.getSpecialPrice());
+            p.setSpecialStartAt(req.getSpecialStartAt());
+            p.setSpecialEndAt(req.getSpecialEndAt());
+        }
         p.setStatus(req.getStatus() == null ? 1 : req.getStatus());
         p.setSort(req.getSort() == null ? 0 : req.getSort());
         p.setCreatedAt(LocalDateTime.now());
         p.setUpdatedAt(LocalDateTime.now());
         productMapper.insert(p);
+        evictShopCache();
         return p;
     }
 
@@ -428,7 +639,13 @@ public class MerchantService {
         if (p == null || !shop.getId().equals(p.getShopId())) {
             throw new BizException(ErrorCode.NOT_FOUND, "商品不存在");
         }
-        if (req.getName() != null) p.setName(req.getName());
+        if (req.getName() != null) {
+            checkLen(req.getName(), 64, "菜品名称");
+            p.setName(req.getName());
+        }
+        if (req.getDescription() != null) {
+            checkLen(req.getDescription(), 500, "菜品描述");
+        }
         if (req.getImage() != null) p.setImage(req.getImage());
         if (req.getDescription() != null) p.setDescription(req.getDescription());
         if (req.getPrice() != null) p.setPrice(req.getPrice());
@@ -437,6 +654,28 @@ public class MerchantService {
         if (req.getCategoryId() != null) p.setCategoryId(req.getCategoryId());
         if (req.getOriginPrice() != null) p.setOriginPrice(req.getOriginPrice());
         if (req.getHasSku() != null) p.setHasSku(req.getHasSku());
+        // 限时特价：specialPrice<=0 视为关闭特价
+        boolean clearSpecial = false;
+        if (req.getSpecialPrice() != null) {
+            if (req.getSpecialPrice() <= 0) {
+                p.setSpecialPrice(null);
+                p.setSpecialStartAt(null);
+                p.setSpecialEndAt(null);
+                clearSpecial = true;
+            } else {
+                int origin = req.getPrice() != null ? req.getPrice() : (p.getPrice() == null ? 0 : p.getPrice());
+                if (req.getSpecialPrice() >= origin) {
+                    throw new BizException(ErrorCode.PARAM, "特价必须低于原价");
+                }
+                if (req.getSpecialStartAt() != null && req.getSpecialEndAt() != null
+                        && !req.getSpecialEndAt().isAfter(req.getSpecialStartAt())) {
+                    throw new BizException(ErrorCode.PARAM, "特价结束时间必须晚于开始时间");
+                }
+                p.setSpecialPrice(req.getSpecialPrice());
+                p.setSpecialStartAt(req.getSpecialStartAt());
+                p.setSpecialEndAt(req.getSpecialEndAt());
+            }
+        }
         boolean clearCombo = false;
         if (req.getComboItems() != null) {
             String combo = normalizeCombo(req.getComboItems());
@@ -457,6 +696,16 @@ public class MerchantService {
                     .set(Product::getUpdatedAt, LocalDateTime.now()));
             p.setComboItems(null);
         }
+        if (clearSpecial) {
+            // 同理：updateById 跳过 null，关闭特价必须显式把三列写成 NULL
+            productMapper.update(null, Wrappers.<Product>lambdaUpdate()
+                    .eq(Product::getId, p.getId())
+                    .set(Product::getSpecialPrice, null)
+                    .set(Product::getSpecialStartAt, null)
+                    .set(Product::getSpecialEndAt, null)
+                    .set(Product::getUpdatedAt, LocalDateTime.now()));
+        }
+        evictShopCache();
         return p;
     }
 }

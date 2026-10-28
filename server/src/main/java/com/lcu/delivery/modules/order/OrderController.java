@@ -25,9 +25,11 @@ public class OrderController {
     @GetMapping
     public Result<PageResult<Map<String, Object>>> list(
             @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) String statuses,
+            @RequestParam(required = false) Integer reviewed,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return Result.ok(orderService.list(UserContext.userId(), status, page, size));
+        return Result.ok(orderService.list(UserContext.userId(), status, statuses, reviewed, page, size));
     }
 
     @GetMapping("/{id}")

@@ -22,6 +22,11 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
+  # 图片上传：Spring 默认只允许 1MB，菜品图/门店照经常 2~4MB，必须放开到 5MB
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
 
 mybatis-plus:
   configuration:
@@ -43,6 +48,8 @@ management:
 app:
   jwt-secret: ${JWT_SECRET:lcu-delivery-dev-secret-key-change-in-production-32}
   token-expire-hours: 168
+  # 敏感字段（学号/身份证/手机号）AES-GCM 加密密钥：生产必须用环境变量覆盖
+  crypto-key: ${APP_CRYPTO_KEY:lcu-delivery-demo-crypto-key-32bytes!}
   # 本地/内测：跳过真实微信登录与支付，便于无商户号时跑通链路；生产必须关掉
   mock-login: ${APP_MOCK_LOGIN:true}
   mock-pay: ${APP_MOCK_PAY:true}
@@ -59,8 +66,6 @@ wechat:
   miniapp:
     appid: ${WX_USER_APPID:}
     secret: ${WX_USER_SECRET:}
-    work-appid: ${WX_WORK_APPID:}
-    work-secret: ${WX_WORK_SECRET:}
   pay:
     mch-id: ${WXPAY_MCH_ID:}
     serial-no: ${WXPAY_MCH_SERIAL_NO:}
