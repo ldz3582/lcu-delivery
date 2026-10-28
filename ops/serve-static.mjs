@@ -81,3 +81,12 @@ const server = http.createServer((req, res) => {
 server.listen(port, '127.0.0.1', () =>
   console.log(`serving ${root} on http://127.0.0.1:${port}  (api -> ${backend})`),
 );
+
+// 被启动器/终端误发 Ctrl+C 时不要退出（否则整套前端会静默掉线）。
+// 需要停服务请用 ops/dev-windows.ps1 stop。
+for (const sig of ['SIGINT', 'SIGBREAK', 'SIGHUP']) {
+  process.on(sig, () => {
+    console.log(`[serve-static] ignored ${sig}, still serving on :${port}`);
+  });
+}
+
