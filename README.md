@@ -14,11 +14,21 @@ lcu-delivery/
 │   ├── docker-compose.yml  MySQL 8.4 + Redis 7.4 + MinIO
 │   ├── sql/                schema.sql（建表）/ seed.sql（开关）/ demo.sql（演示数据）/ migration-*.sql（增量迁移）
 │   ├── dev.sh              一键启动
+│   ├── use-wechat.sh       接入真实 AppID/AppSecret
+│   ├── publish-wechat.sh   ★ 发布流水线：体检 / 生产构建 / 体验版二维码 / 上传
+│   ├── dev-local.sh        不用 Docker 起后端（brew MySQL 8.4 + Redis）
+│   ├── tunnel.sh           内网穿透：给后端一个公网 HTTPS 地址，别人任何网络都能连
 │   └── smoke-test.sh       端到端冒烟测试
 ├── starter/                启动包：30 分钟拉起依赖服务 + 29 张表的独立最小版本
-├── tools/docgen/           行动手册 docx 的生成脚本（python-docx）
+├── tools/
+│   ├── docgen/             行动手册 docx 的生成脚本（python-docx）
+│   └── mpci/               miniprogram-ci 封装（上传 / 预览）
 └── docs/
     ├── API.md              接口清单（157 个，由脚本生成）
+    ├── 接入微信公众平台.md  拿 AppID、开发者工具、本地联调
+    ├── 发布微信小程序.md    ★ 发到微信平台的完整路线（体验版 / 正式上线 / 支付方案）
+    ├── 体验版内测邀请.md    预览码 vs 体验版码，怎么把别人拉进来扫
+    ├── 版本记录.md          每次打出来的包 / 重启的后端，按版本对账
     ├── gen_api.py          从 Controller 注解生成接口文档
     ├── gen_entities.py     从字段定义生成实体/Mapper
     └── design/             设计方案.docx、开发行动手册.docx
@@ -137,6 +147,18 @@ lcu-delivery/
 
 完整步骤（注册、拿密钥、开发者工具、域名备案、上线四件套、错误码）见
 [`docs/接入微信公众平台.md`](docs/接入微信公众平台.md)。
+
+## 发布到微信小程序平台
+
+```bash
+./ops/publish-wechat.sh check                            # 体检：哪些就绪、哪些还卡着
+./ops/publish-wechat.sh build https://api.你的域名.com    # 生产构建 + 产物校验（残留 IP / 体积 / urlCheck）
+./ops/publish-wechat.sh preview ~/private.xxx.key        # 出体验版二维码，手机扫码就能看
+./ops/publish-wechat.sh upload  ~/private.xxx.key 1.0.0 "描述"   # 上传开发版本，再去网页提审
+```
+
+路线选择、域名备案、类目/隐私/备案四件套、提审避坑、错误码，以及**当前最大的坑（微信支付还是空壳，
+线上付不了款）**，见 [`docs/发布微信小程序.md`](docs/发布微信小程序.md)。
 
 ## 平台开关（后台即时生效，不用重启）
 
