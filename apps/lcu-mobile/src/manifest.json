@@ -2,8 +2,8 @@
   "name": "聊大外卖",
   "appid": "",
   "description": "聊城大学校园外卖用户端",
-  "versionName": "0.1.0",
-  "versionCode": "100",
+  "versionName": "1.1.0",
+  "versionCode": "110",
   "transformPx": false,
   "mp-weixin": {
     "appid": "wx06f28a1a6a6b5c73",

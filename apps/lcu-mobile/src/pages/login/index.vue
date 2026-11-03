@@ -31,13 +31,13 @@
       <view class="divider"><text>或</text></view>
 
       <view class="btn ghost" @click="doWxLogin">微信一键登录</view>
-      <view class="hint center">微信登录需在 ops/.env 配置 AppSecret 后可用</view>
+      <view class="hint center">登录后可浏览店铺、下单与查看订单</view>
     </view>
 
-    <!-- 商家 / 骑手：选择演示账号后进入 -->
+    <!-- 商家 / 骑手：选择账号后进入 -->
     <view v-else class="card">
       <view class="muted pick-title">
-        {{ accounts.length ? (role === 'MERCHANT' ? '选择要进入的店铺：' : '选择骑手账号：') : '演示账号' }}
+        {{ role === 'MERCHANT' ? '选择要进入的店铺：' : '选择骑手账号：' }}
       </view>
 
       <view v-if="accounts.length" class="acct-list">
@@ -59,15 +59,15 @@
         </view>
       </view>
       <view v-else class="muted">
-        {{ role === 'MERCHANT' ? 'mock_merchant（一食堂·黄焖鸡）' : 'mock_rider（骑手小张）' }}
+        暂无可用账号，请先在「我的」里提交{{ role === 'MERCHANT' ? '商家入驻' : '骑手入驻' }}申请
       </view>
 
       <view class="btn" @click="doStaffLogin">{{ loading ? '处理中…' : '进入' + ROLE_LABEL[role] + '端' }}</view>
-      <view class="hint center">演示账号列表来自 GET /api/auth/mock-accounts（仅 mock 环境有数据）</view>
+      <view v-if="accounts.length" class="hint center">账号列表来自平台已开通的店铺 / 骑手</view>
     </view>
 
     <view class="foot">
-      <text class="muted">管理员请用电脑打开 web 后台（127.0.0.1:5174）</text>
+      <text class="muted">校园配送服务由平台统一运营</text>
     </view>
   </view>
 </template>

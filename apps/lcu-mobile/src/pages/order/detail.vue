@@ -68,6 +68,32 @@
       </view>
     </view>
 
+    <!-- 取餐 / 送达照片：骑手拍过才显示 -->
+    <view v-if="showPhotos" class="card">
+      <view class="between"><text class="sec">配送照片</text></view>
+      <view class="photos">
+        <view v-if="pickupPhoto" class="photo-item">
+          <image
+            class="pickup-photo"
+            :src="pickupPhoto"
+            mode="aspectFill"
+            @click="previewPhoto(pickupPhoto)"
+          />
+          <text class="photo-cap">取餐</text>
+        </view>
+        <view v-if="deliverPhoto" class="photo-item">
+          <image
+            class="deliver-photo"
+            :src="deliverPhoto"
+            mode="aspectFill"
+            @click="previewPhoto(deliverPhoto)"
+          />
+          <text class="photo-cap">送达</text>
+        </view>
+      </view>
+      <view class="muted mt8">照片由骑手在取餐 / 送达时拍摄，点击可看大图</view>
+    </view>
+
     <!-- 骑手位置：status 30/40，有坐标才渲染地图，否则文字降级 -->
     <view v-if="showMapSection" class="card">
       <view class="between"><text class="sec">骑手位置</text></view>
@@ -204,6 +230,18 @@ const riderScore = computed(() => {
   return typeof s === 'number' ? s.toFixed(1) : '暂无'
 })
 const riderPhoneMasked = computed(() => maskPhone(track.value?.rider?.phone || ''))
+
+// ---------------- 取餐 / 送达照片 ----------------
+const pickupPhoto = computed(() => track.value?.photos?.pickup || '')
+const deliverPhoto = computed(() => track.value?.photos?.deliver || '')
+const showPhotos = computed(() => !!(pickupPhoto.value || deliverPhoto.value))
+
+/** 点开大图看；两个都有就支持左右滑 */
+function previewPhoto(cur: string) {
+  const urls = [pickupPhoto.value, deliverPhoto.value].filter(Boolean) as string[]
+  if (!cur || !urls.length) return
+  uni.previewImage({ urls, current: cur })
+}
 
 /** 后端可能已脱敏，已含 * 直接透出，否则按 3-4-4 打码 */
 function maskPhone(phone: string) {
@@ -517,4 +555,15 @@ onPullDownRefresh(async () => {
 
 /* 地图 */
 .map { width: 100%; height: 380rpx; border-radius: 16rpx; overflow: hidden; }
+
+/* 取餐 / 送达照片 */
+.photos { display: flex; gap: 16rpx; margin-top: 16rpx; }
+.photo-item { flex: 1; position: relative; }
+.pickup-photo,
+.deliver-photo { width: 100%; height: 260rpx; border-radius: 16rpx; background: #f3f4f6; }
+.photo-cap {
+  position: absolute; left: 12rpx; bottom: 12rpx;
+  font-size: 22rpx; color: #fff; background: rgba(0, 0, 0, .55);
+  border-radius: 8rpx; padding: 4rpx 12rpx;
+}
 </style>

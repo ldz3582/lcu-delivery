@@ -482,6 +482,24 @@ public class OrderService {
         data.put("location", location);
         data.put("shop", shopVo);
         data.put("destination", destination);
+
+        // 取餐 / 送达照片：骑手上传后用户端要能看到，否则餐品出问题没法举证。
+        // 照片挂在 delivery_task 上，这里顺手带出去，前端不用再单开接口。
+        Map<String, Object> photos = null;
+        List<Map<String, Object>> taskRows = jdbc.queryForList(
+                "SELECT pickup_photo, deliver_photo FROM delivery_task WHERE order_id = ? ORDER BY id DESC LIMIT 1",
+                orderId);
+        if (!taskRows.isEmpty()) {
+            Map<String, Object> row = taskRows.get(0);
+            Object pickup = row.get("pickup_photo");
+            Object deliver = row.get("deliver_photo");
+            if (pickup != null || deliver != null) {
+                photos = new LinkedHashMap<>();
+                photos.put("pickup", pickup);
+                photos.put("deliver", deliver);
+            }
+        }
+        data.put("photos", photos);
         return data;
     }
 

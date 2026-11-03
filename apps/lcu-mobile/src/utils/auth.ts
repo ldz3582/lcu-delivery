@@ -18,6 +18,13 @@ export interface LoginResp {
 const ROLE_KEY = 'lcu_role'
 const USER_KEY = 'lcu_user'
 const OPENID_KEY = 'lcu_openid'
+/**
+ * 上一次的「用户端」会话快照。
+ * 为什么需要：从商家/骑手切回用户端时，如果走 mock-login 会拿一个随机的
+ * dev_xxx openid 建出一个全新账号，用户之前下的单、地址、优惠券全看不见。
+ * 所以切回用户端一律恢复这份快照，不再重新登录。
+ */
+const PREV_USER_KEY = 'lcu_prev_user'
 /** 每个角色记住上次选的演示账号（商家=哪家店，骑手=哪个骑手） */
 const ACCOUNT_KEY = 'lcu_account_'
 
@@ -56,6 +63,8 @@ function persist(resp: LoginResp, role: Role) {
   setToken(resp.token)
   uni.setStorageSync(ROLE_KEY, role)
   uni.setStorageSync(USER_KEY, resp)
+  // 用户端会话存一份快照，切去商家/骑手再切回来时用它恢复，避免建新账号
+  if (role === 'USER') uni.setStorageSync(PREV_USER_KEY, { token: resp.token, user: resp })
 }
 
 function deviceOpenid(): string {
@@ -137,11 +146,26 @@ export async function loginByWechat(): Promise<LoginResp> {
 
 export function logout() {
   clearToken()
+  uni.removeStorageSync(PREV_USER_KEY)
   uni.reLaunch({ url: '/pages/login/index' })
 }
 
-/** 直接切身份（已登录状态下换角色，会重新走一次对应登录） */
+/**
+ * 切换身份。
+ * 切回「用户」端时优先恢复上一次的用户会话——绝不能走 mock-login，
+ * 那会用随机 dev_ openid 建出一个新账号，用户的订单/地址/券全"消失"。
+ */
 export async function switchTo(role: Role): Promise<void> {
+  if (role === 'USER') {
+    const prev = uni.getStorageSync(PREV_USER_KEY)
+    if (prev && prev.token && prev.user) {
+      setToken(prev.token)
+      uni.setStorageSync(ROLE_KEY, 'USER')
+      uni.setStorageSync(USER_KEY, prev.user)
+      uni.reLaunch({ url: HOME.USER })
+      return
+    }
+  }
   clearToken()
   await loginByRole(role)
   uni.reLaunch({ url: HOME[role] })

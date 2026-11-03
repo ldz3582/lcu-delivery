@@ -134,11 +134,19 @@ export interface OrderTrackShop {
 export interface OrderTrackDestination {
   lng: number; lat: number; text: string
 }
+export interface OrderTrackPhotos {
+  /** 骑手取餐时拍的照片 */
+  pickup: string | null
+  /** 骑手送达时拍的照片 */
+  deliver: string | null
+}
 export interface OrderTrack {
   orderId: number; status: number; statusText: string; etaMinutes: number | null
   steps: OrderTrackStep[]; timeline: OrderTrackEvent[]
   rider: OrderTrackRider | null; location: OrderTrackLocation | null
   shop: OrderTrackShop; destination: OrderTrackDestination
+  /** 取餐 / 送达照片，没上传则为 null */
+  photos?: OrderTrackPhotos | null
 }
 
 // ---------------- 用户端 ----------------
