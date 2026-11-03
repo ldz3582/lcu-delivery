@@ -1,0 +1,10 @@
+{
+  "name": "lcu-mpci",
+  "private": true,
+  "version": "1.0.0",
+  "description": "微信小程序代码上传/预览（miniprogram-ci 封装）",
+  "dependencies": {
+    "miniprogram-automator": "^0.13.0",
+    "miniprogram-ci": "^2.1.31"
+  }
+}

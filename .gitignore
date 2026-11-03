@@ -15,3 +15,8 @@ starter/certs/
 
 # 本地运行目录：数据库数据、Maven 仓库、npm 缓存、截图、临时脚本等（约 1.3GB）
 .local/
+
+# 微信小程序上传密钥 / 预览二维码（绝不入库）
+*.key
+apps/lcu-mobile/dist/preview.jpg
+.env.production
