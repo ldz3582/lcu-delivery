@@ -1,0 +1,18 @@
+# 后端镜像：只跑 jar，不编译（jar 在 Mac 侧用 Maven 打好）
+# 目标平台 linux/amd64（ECS x86_64），构建时显式 --platform
+FROM --platform=linux/amd64 eclipse-temurin:21-jre
+
+ENV TZ=Asia/Shanghai \
+    LANG=C.UTF-8 \
+    JAVA_TOOL_OPTIONS="-Xms128m -Xmx480m -XX:+UseSerialGC -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError"
+
+WORKDIR /app
+
+# 上传文件目录（由 compose 挂载持久化）
+RUN mkdir -p /app/uploads
+
+COPY delivery.jar /app/app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

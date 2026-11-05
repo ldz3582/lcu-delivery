@@ -1,0 +1,125 @@
+# 单机生产编排：MySQL 8.4 + Redis 7.4 + 后端 + Nginx（含管理后台静态站）
+# 目标机器：阿里云 ECS 2C2G / Alibaba Cloud Linux 3（x86_64）
+#
+# 用法（在服务器 /opt/lcu 下）：
+#   cp .env.example .env && vi .env
+#   docker compose up -d --build
+#   docker compose ps && docker compose logs -f api
+#
+# 内存预算（2G 机器）：mysql 600M + redis 200M + api 700M + nginx 64M ≈ 1.5G
+
+name: lcu
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: lcu-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --max-connections=120
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+      - --skip-name-resolve
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-lcu_delivery}
+      MYSQL_USER: ${MYSQL_USER:-lcu}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      # 首次启动自动建表 / 灌数据（docker-entrypoint-initdb.d 只在数据目录为空时执行）
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    mem_limit: 700m
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: lcu-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 96mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    mem_limit: 220m
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: lcu/api:0.1.0
+    container_name: lcu-api
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-lcu_delivery}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: ${MYSQL_USER:-lcu}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      APP_CRYPTO_KEY: ${APP_CRYPTO_KEY}
+      # 首次启动（admin_user 表为空）时创建的 admin 密码；不设会随机生成并只打在日志里
+      ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD:-Admin@123456}
+      APP_MOCK_LOGIN: ${APP_MOCK_LOGIN:-true}
+      APP_MOCK_PAY: ${APP_MOCK_PAY:-true}
+      APP_FENCE_ENFORCE: ${APP_FENCE_ENFORCE:-true}
+      APP_UPLOAD_DIR: /app/uploads
+      # 留空则由请求 Host 自动拼图片地址；有域名后填 https://你的域名
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-}
+      WX_USER_APPID: ${WX_USER_APPID:-}
+      WX_USER_SECRET: ${WX_USER_SECRET:-}
+      TENCENT_MAP_KEY: ${TENCENT_MAP_KEY:-}
+    volumes:
+      - ./uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080' && echo ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    mem_limit: 800m
+
+  web:
+    image: nginx:1.27-alpine
+    container_name: lcu-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./admin:/usr/share/nginx/html:ro
+      # 可选：小程序 H5 预览（构建出 h5 时才有内容）
+      - ./h5:/usr/share/nginx/h5:ro
+    mem_limit: 96m

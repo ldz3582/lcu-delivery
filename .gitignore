@@ -20,3 +20,6 @@ starter/certs/
 *.key
 apps/lcu-mobile/dist/preview.jpg
 .env.production
+
+# 部署打包临时目录（jar + dist，随时重建）
+deploy/.stage/
