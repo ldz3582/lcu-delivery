@@ -26,9 +26,26 @@ SERVER=root@47.102.49.46 ./deploy/deploy.sh
 3. `rsync` 到服务器 `/opt/lcu`（不覆盖 `data/`、`uploads/`、`.env`）
 4. 服务器基线：**2G swap**、Docker + compose 插件、registry 镜像加速、目录
 5. 首次生成 `.env`（随机数据库/Redis 密码、随机 JWT/加密密钥）
-6. `docker compose up -d --build`，然后 `http://<IP>/health` 轮询直到 UP
+6. `docker build` 出镜像 + `docker compose up -d`，然后 `http://<IP>/health` 轮询直到 UP
 
 只想换 jar 复用构建：`SERVER=root@47.102.49.46 ./deploy/deploy.sh --reuse-jar`
+
+## ⚠️ 部署前必做：安全组放通 80
+
+部署成功 ≠ 能打开。阿里云默认安全组只有 22/3389/ICMP，**80 必须手动加**：
+
+实例页 → 网络与安全组 → 安全组 → 配置规则 → 入方向 → 快速添加规则 →
+勾选 **Web HTTP 流量访问**（和 **Web HTTPS 流量访问**）→ 确定。
+
+判定方法（花 1 秒）：
+
+```bash
+nc -vz 47.102.49.46 80     # 通 = 好了
+```
+
+> 2026-11-06 实测：安全组未放通时，**服务器自己 curl 自己的公网 IP 也超时**，
+> 但 `ss -ltnp | grep :80` 能看到 docker-proxy 在监听——这个组合就是安全组问题，
+> 不要去改 Nginx 或 iptables。
 
 ## 部署后
 
@@ -37,6 +54,9 @@ SERVER=root@47.102.49.46 ./deploy/deploy.sh
 | `http://47.102.49.46/` | 管理后台，`admin` / `Admin@123456`（多角色：`kefu`/`caiwu`/`shenhe` 同密码） |
 | `http://47.102.49.46/api/shops` | 后端接口自检 |
 | `http://47.102.49.46/health` | 健康检查（反代 `/actuator/health`） |
+
+实测速度（从外网）：`/` 86ms，`/api/shops` 450ms，`/api/categories` 166ms。
+外网跑完整 `ops/smoke-test.sh` 27 步全通过。
 
 调试命令（在服务器 `/opt/lcu`）：
 
