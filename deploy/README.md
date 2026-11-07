@@ -51,7 +51,7 @@ nc -vz 47.102.49.46 80     # 通 = 好了
 
 | 地址 | 说明 |
 | --- | --- |
-| `http://47.102.49.46/` | 管理后台，`admin` / `Admin@123456`（多角色：`kefu`/`caiwu`/`shenhe` 同密码） |
+| `http://47.102.49.46/` | 管理后台，`admin` / `<部署时生成的强密码，见服务器 /opt/lcu/.env>`（多角色：`kefu`/`caiwu`/`shenhe` 同密码） |
 | `http://47.102.49.46/api/shops` | 后端接口自检 |
 | `http://47.102.49.46/health` | 健康检查（反代 `/actuator/health`） |
 
@@ -74,7 +74,7 @@ docker compose down            # 停（数据在 ./data，不丢）
 - **初始化只在空库执行**：`init/` 挂到 `/docker-entrypoint-initdb.d`，MySQL 数据目录非空时被忽略。
   要重灌数据：`docker compose down && rm -rf data/mysql && docker compose up -d`。
 - **admin 初始密码**：`admin_user` 为空时后端会创建 `admin`，默认随机密码只打在日志里。
-  部署包通过 `.env` 的 `ADMIN_INIT_PASSWORD` 固定成 `Admin@123456`，演示才可登录。
+  部署包通过 `.env` 的 `ADMIN_INIT_PASSWORD` 固定成 `<部署时生成的强密码，见服务器 /opt/lcu/.env>`，演示才可登录。
 - **2G 内存**：JVM `-Xmx480m`、MySQL buffer pool 128M、Redis maxmemory 96M，并强制 2G swap。
 - **图片**：存在容器卷 `./uploads`，对外走 `/uploads/**`，`APP_PUBLIC_BASE_URL` 留空即按请求 Host 拼。
 

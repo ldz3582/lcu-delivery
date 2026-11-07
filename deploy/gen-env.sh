@@ -17,12 +17,15 @@ MYSQL_PASSWORD="$(rand 16)"
 REDIS_PASSWORD="$(rand 16)"
 JWT_SECRET="$(rand 32)"
 APP_CRYPTO_KEY="$(rand 16)"
+# 管理员初始密码随机生成；后台改密码请用「账号管理」
+ADMIN_INIT_PASSWORD="$(openssl rand -base64 9 | tr -d '/+=' | head -c 12)Aa1"
 
 sed -e "s|^MYSQL_ROOT_PASSWORD=.*|MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}|" \
     -e "s|^MYSQL_PASSWORD=.*|MYSQL_PASSWORD=${MYSQL_PASSWORD}|" \
     -e "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=${REDIS_PASSWORD}|" \
     -e "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" \
     -e "s|^APP_CRYPTO_KEY=.*|APP_CRYPTO_KEY=${APP_CRYPTO_KEY}|" \
+    -e "s|^ADMIN_INIT_PASSWORD=.*|ADMIN_INIT_PASSWORD=${ADMIN_INIT_PASSWORD}|" \
     .env.example > .env
 chmod 600 .env
 echo "  已生成 .env（随机密钥，数据库密码见该文件）"

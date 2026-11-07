@@ -89,7 +89,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       APP_CRYPTO_KEY: ${APP_CRYPTO_KEY}
       # 首次启动（admin_user 表为空）时创建的 admin 密码；不设会随机生成并只打在日志里
-      ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD:-Admin@123456}
+      ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD}
       APP_MOCK_LOGIN: ${APP_MOCK_LOGIN:-true}
       APP_MOCK_PAY: ${APP_MOCK_PAY:-true}
       APP_FENCE_ENFORCE: ${APP_FENCE_ENFORCE:-true}
