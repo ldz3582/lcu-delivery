@@ -188,8 +188,15 @@ export const api = {
   cancelOrder: (id: number, reason = '') => http.post(`/api/orders/${id}/cancel`, { reason }),
   confirmOrder: (id: number) => http.post(`/api/orders/${id}/confirm`),
 
-  prepay: (orderId: number) => http.post<any>('/api/pay/prepay', { orderId }),
+  /**
+   * 预支付。scene 决定通道：
+   *  MINIAPP 小程序 JSAPI（默认）｜ H5 微信外浏览器｜ NATIVE PC 扫码｜ MP 微信内公众号 JSAPI
+   */
+  prepay: (orderId: number, scene?: string) =>
+    http.post<any>('/api/pay/prepay', { orderId, scene }),
   mockPay: (orderId: number) => http.post<any>('/api/pay/mock-pay', { orderId }),
+  /** wx.requestPayment 成功后兜底查单，防止回调延迟导致订单停在待支付 */
+  syncPay: (orderId: number) => http.post<any>('/api/pay/sync', { orderId }),
 
   profile: () => http.get<any>('/api/user/profile')
 }

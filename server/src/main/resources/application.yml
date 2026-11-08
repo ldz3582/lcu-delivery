@@ -66,6 +66,13 @@ wechat:
   miniapp:
     appid: ${WX_USER_APPID:}
     secret: ${WX_USER_SECRET:}
+  # 公众号（服务号）：H5 在微信内打开时用它做网页授权，拿 openid 后走 JSAPI 支付。
+  # 不配则 H5 只能走微信外 H5 支付（MWEB）。
+  official:
+    appid: ${WX_MP_APPID:}
+    secret: ${WX_MP_SECRET:}
+  # 微信支付 v3（JSAPI）。app.mock-pay=false 时这 6 项必须齐全，否则启动即失败。
+  # 回调地址必须公网 HTTPS 且已在小程序后台配好 request 合法域名。
   pay:
     mch-id: ${WXPAY_MCH_ID:}
     serial-no: ${WXPAY_MCH_SERIAL_NO:}

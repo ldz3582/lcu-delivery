@@ -79,9 +79,11 @@ import {
   HOME,
   ROLE_LABEL,
   fetchMockAccounts,
+  finishOAuthLogin,
   loginByRole,
   loginByStuNo,
   loginByWechat,
+  startOAuthLogin,
   currentRole,
   savedOpenid,
   logout,
@@ -117,6 +119,21 @@ async function pickRole(r: Role) {
 }
 
 onLoad(async (q: any) => {
+  // #ifdef H5
+  // 公众号网页授权回调：URL 上带 code，直接换登录态
+  if (q?.code) {
+    loading.value = true
+    try {
+      await finishOAuthLogin(String(q.code))
+      uni.reLaunch({ url: HOME.USER })
+      return
+    } catch (e) {
+      uni.showToast({ title: '微信授权登录失败，请用学号登录', icon: 'none' })
+    } finally {
+      loading.value = false
+    }
+  }
+  // #endif
   if (q?.role && ['USER', 'MERCHANT', 'RIDER'].includes(q.role)) role.value = q.role
   const cur = currentRole()
   if (cur) role.value = cur
@@ -153,6 +170,23 @@ async function doStuLogin() {
 
 async function doWxLogin() {
   if (loading.value) return
+  // #ifdef H5
+  // 浏览器：走公众号网页授权（静默拿 openid，unionid 关联小程序账号）
+  loading.value = true
+  try {
+    const redirect = window.location.origin + window.location.pathname
+    const ok = await startOAuthLogin(redirect)
+    if (!ok) {
+      uni.showToast({ title: '平台未配置公众号，请用学号登录', icon: 'none' })
+    }
+  } catch (e) {
+    uni.showToast({ title: '微信授权失败，请用学号登录', icon: 'none' })
+  } finally {
+    loading.value = false
+  }
+  return
+  // #endif
+  // #ifndef H5
   loading.value = true
   try {
     const resp = await loginByWechat()
@@ -183,6 +217,7 @@ async function doWxLogin() {
   } finally {
     loading.value = false
   }
+  // #endif
 }
 
 async function doStaffLogin() {

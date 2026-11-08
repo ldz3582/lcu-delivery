@@ -20,6 +20,8 @@ public class Payment {
     private Integer status;
     private String prepayId;
     private Integer profitSharing;
+    /** 下单通道：MINIAPP（小程序 JSAPI）/ H5（微信外浏览器）/ NATIVE（PC 扫码） */
+    private String scene;
     private LocalDateTime paidAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -86,6 +88,14 @@ public class Payment {
 
     public void setProfitSharing(Integer profitSharing) {
         this.profitSharing = profitSharing;
+    }
+
+    public String getScene() {
+        return scene;
+    }
+
+    public void setScene(String scene) {
+        this.scene = scene;
     }
 
     public LocalDateTime getPaidAt() {

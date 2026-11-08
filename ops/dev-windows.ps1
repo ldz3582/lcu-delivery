@@ -130,26 +130,46 @@ function Start-Launcher([string]$Name, [string]$WorkDir, [string[]]$BodyLines) {
   $body = @('@echo off', ('cd /d "' + $WorkDir + '"')) + $BodyLines
   Set-Content -Path $launcher -Value $body -Encoding ascii
 
-  $vbs = Join-Path $runAscii "$Name.vbs"
-  $vbsLine = 'CreateObject("WScript.Shell").Run "cmd /c ""' + $launcher + '""", 0, False'
-  Set-Content -Path $vbs -Value $vbsLine -Encoding ascii
-
-  $cmdLine = 'wscript.exe "' + $vbs + '"'
-  $res = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-    CommandLine      = $cmdLine
-    CurrentDirectory = $WorkDir
-  }
-  if ($res.ReturnValue -ne 0) {
-    throw "failed to launch $Name (Win32_Process.Create returned $($res.ReturnValue))"
-  }
-  Set-Content -Path (Join-Path $runAscii "$Name.pid") -Value $res.ProcessId -Encoding ascii
-  return $res.ProcessId
+  # Detach via a hidden cmd.exe child. On this host Win32_Process.Create +
+  # wscript.exe reported success but the long-lived server never appeared; a
+  # hidden Start-Process child survives the calling terminal/job instead.
+  $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', ('"' + $launcher + '"') `
+    -PassThru -WindowStyle Hidden
+  Set-Content -Path (Join-Path $runAscii "$Name.pid") -Value $proc.Id -Encoding ascii
+  return $proc.Id
 }
 
 function Stop-Port([int]$Port) {
+  # Get-NetTCPConnection returns nothing on some hardened Windows hosts, so
+  # fall back to netstat -ano which always reports the owning PID.
+  $pids = @()
   $listeners = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
-  foreach ($l in $listeners) {
-    Stop-Process -Id $l.OwningProcess -Force -ErrorAction SilentlyContinue
+  foreach ($l in $listeners) { if ($l.OwningProcess) { $pids += $l.OwningProcess } }
+  if ($pids.Count -eq 0) {
+    $lines = netstat -ano -p tcp 2>$null | Select-String (':' + $Port + '\s.*LISTENING')
+    foreach ($l in $lines) {
+      $cols = ($l.Line -split '\s+') | Where-Object { $_ }
+      if ($cols.Count -ge 5) { $pids += [int]$cols[-1] }
+    }
+  }
+  foreach ($procId in ($pids | Sort-Object -Unique)) {
+    Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+  }
+  # Hardened Windows hosts may suppress TCP owner info entirely (both
+  # Get-NetTCPConnection and netstat return nothing). Fall back to matching the
+  # launcher command line, which is unique per service.
+  $portPatterns = @{
+    $MysqlPort = 'mysqld\.exe.*--port=' + $MysqlPort
+    $RedisPort = 'redis-server\.exe.*--port=' + $RedisPort
+    $ApiPort   = 'delivery-0\.1\.0\.jar.*--server\.port=' + $ApiPort
+    $AdminPort = 'serve-static\.mjs.*\s' + $AdminPort + '\s'
+    $H5Port    = 'serve-static\.mjs.*\s' + $H5Port + '\s'
+  }
+  $pattern = $portPatterns[$Port]
+  if ($pattern) {
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      $_.CommandLine -match $pattern
+    } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   }
 }
 
@@ -179,6 +199,11 @@ function Invoke-Stop {
   Stop-Port $ApiPort
   Stop-Port $RedisPort
   Stop-Port $MysqlPort
+  # WSL2 redis lives in the Linux namespace; netstat on Windows sees it but
+  # Stop-Process cannot reach it. Ask WSL to kill the daemon by port.
+  if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
+    wsl.exe -u root -e bash -c "pkill -f 'redis-server.*$RedisPort'" 2>$null | Out-Null
+  }
   Start-Sleep -Seconds 2
   if (Test-Path $RunDir) { Remove-Item (Join-Path $RunDir '*.pid') -Force -ErrorAction SilentlyContinue }
   $runAscii = Join-Path $Link 'run'
@@ -250,7 +275,7 @@ function Invoke-Start {
   Write-Step "Redis :$RedisPort"
   if (Test-Port $RedisPort) {
     Write-Skip 'already listening'
-  } else {
+  } elseif (Test-Path (Join-Path $RedisHome 'redis-server.exe')) {
     $conf = Join-Path $Link 'redis\redis-6380.conf'
     if (-not (Test-Path $conf)) {
       $confLines = @(
@@ -269,7 +294,29 @@ function Invoke-Start {
     $redisLine = '"' + $redis + '" "' + $conf + '" >> "' + (Join-Path $Link 'logs\redis.out.log') + '" 2>&1'
     Start-Launcher 'redis' $Link @($redisLine) | Out-Null
     if (-not (Wait-Port $RedisPort 30)) { throw "Redis did not start, see $Link\logs\redis.out.log" }
-    Write-Ok 'started'
+    Write-Ok 'started (native windows redis)'
+  } else {
+    # No Windows redis-server.exe: use WSL2 (Ubuntu) redis-server.
+    # WSL2 forwards localhost ports to Windows automatically.
+    $wslScript = Join-Path $env:TEMP 'lcu-redis-start.sh'
+    if (-not (Test-Path $wslScript)) {
+      $lines = @(
+        '#!/bin/bash',
+        'set -u',
+        "pkill -f 'redis-server.*$RedisPort' 2>/dev/null || true",
+        'sleep 1',
+        "redis-server --port $RedisPort --bind 0.0.0.0 --protected-mode no --save '' --appendonly no --daemonize yes --logfile /tmp/lcu-redis.log --pidfile /tmp/lcu-redis.pid --databases 16",
+        'sleep 2',
+        "redis-cli -p $RedisPort ping"
+      )
+      Set-Content -Path $wslScript -Value $lines -Encoding ascii
+    }
+    # C:\Users\... -> /mnt/c/Users/... (WSL mount points are lowercase)
+    $wslPath = '/mnt/' + $wslScript.Substring(0, 1).ToLower() + ($wslScript.Substring(2) -replace '\\', '/')
+    $redisLine = 'wsl.exe -u root -e bash ' + $wslPath + ' >> "' + (Join-Path $Link 'logs\redis.out.log') + '" 2>&1'
+    Start-Launcher 'redis' $Link @($redisLine) | Out-Null
+    if (-not (Wait-Port $RedisPort 30)) { throw "Redis(WSL) did not start, see $Link\logs\redis.out.log" }
+    Write-Ok 'started (WSL2 redis)'
   }
 
   # ---- API ----
