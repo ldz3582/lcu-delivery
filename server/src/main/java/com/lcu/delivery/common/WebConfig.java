@@ -37,6 +37,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/mock-login",
                         "/api/auth/mock-accounts",
                         "/api/auth/stu-login",
+                        "/api/auth/oauth-url",
+                        "/api/auth/oauth-login",
                         "/api/admin/login",
                         "/api/categories",
                         "/api/shops/**",
@@ -46,6 +48,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/banners",
                         "/api/specials",
                         "/api/pay/notify",
+                        "/api/pay/refund-notify",
+                        "/api/pay/transfer-notify",
                         "/api/health"
                 );
     }

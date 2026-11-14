@@ -169,6 +169,7 @@ import { computed, ref } from 'vue'
 import { onHide, onLoad, onPullDownRefresh, onShow, onUnload } from '@dcloudio/uni-app'
 import { api, reviewApi, type OrderTrack } from '../../api'
 import { guard } from '../../utils/auth'
+import { invokePay, pickPayScene } from '../../utils/pay'
 
 const order = ref<any>(null)
 const track = ref<OrderTrack | null>(null)
@@ -404,16 +405,38 @@ async function load() {
 }
 
 async function pay() {
-  await api.prepay(orderId)
-  const ok = await new Promise<boolean>((resolve) => {
-    uni.showModal({
-      title: '模拟支付',
-      content: `确认支付 ${(order.value.payAmount / 100).toFixed(2)} 元？`,
-      success: (r) => resolve(r.confirm)
+  const prepay = await api.prepay(orderId, pickPayScene())
+  if (prepay.mock) {
+    const ok = await new Promise<boolean>((resolve) => {
+      uni.showModal({
+        title: '模拟支付',
+        content: `确认支付 ${(order.value.payAmount / 100).toFixed(2)} 元？`,
+        success: (r) => resolve(r.confirm)
+      })
     })
-  })
-  if (ok) {
-    await api.mockPay(orderId)
+    if (ok) {
+      await api.mockPay(orderId)
+      uni.showToast({ title: '支付成功' })
+      load()
+    }
+    return
+  }
+  if (prepay.channel === 'native') {
+    uni.showModal({
+      title: '扫码支付',
+      content: '请使用微信扫描二维码完成支付。当前环境无法渲染二维码，请在手机端打开本页面完成支付。',
+      showCancel: false
+    })
+    return
+  }
+  // 真实支付：小程序 JSAPI / 微信内公众号 JSAPI / 微信外 H5 跳转
+  const paid = await invokePay(prepay)
+  if (paid) {
+    try {
+      await api.syncPay(orderId)
+    } catch (e) {
+      console.warn('syncPay failed', e)
+    }
     uni.showToast({ title: '支付成功' })
     load()
   }

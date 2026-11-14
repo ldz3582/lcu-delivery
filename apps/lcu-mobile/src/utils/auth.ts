@@ -144,6 +144,34 @@ export async function loginByWechat(): Promise<LoginResp> {
   return resp
 }
 
+/**
+ * 平台侧（H5 / 浏览器）登录第一步：跳公众号网页授权。
+ * 后端没配公众号时返回 false，调用方退回学号登录。
+ */
+export async function startOAuthLogin(redirectUri: string): Promise<boolean> {
+  const url = await http.get<string | null>(
+    '/api/auth/oauth-url',
+    { redirect: redirectUri },
+    { showError: false }
+  )
+  if (!url) return false
+  // #ifdef H5
+  window.location.href = url
+  // #endif
+  // #ifndef H5
+  // 非 H5（小程序/App）没有网页授权，统一返回 false 走原生登录
+  return false
+  // #endif
+  return true
+}
+
+/** 平台侧登录第二步：授权回调带回的 code 换登录态 */
+export async function finishOAuthLogin(code: string): Promise<LoginResp> {
+  const resp = await http.post<LoginResp>('/api/auth/oauth-login', { code })
+  persist(resp, 'USER')
+  return resp
+}
+
 export function logout() {
   clearToken()
   uni.removeStorageSync(PREV_USER_KEY)

@@ -9,6 +9,7 @@ import com.lcu.delivery.modules.admin.SysConfigService;
 import com.lcu.delivery.modules.order.OrderStatus;
 import com.lcu.delivery.modules.order.entity.Order;
 import com.lcu.delivery.modules.order.mapper.OrderMapper;
+import com.lcu.delivery.modules.pay.PayoutGateway;
 import com.lcu.delivery.modules.settle.entity.Settlement;
 import com.lcu.delivery.modules.settle.entity.Wallet;
 import com.lcu.delivery.modules.settle.entity.WalletFlow;
@@ -49,10 +50,12 @@ public class MerchantFinanceService {
     private final OrderMapper orderMapper;
     private final JdbcTemplate jdbc;
     private final SysConfigService config;
+    private final PayoutGateway payoutGateway;
 
     public MerchantFinanceService(SettlementMapper settlementMapper, WalletMapper walletMapper,
                                   WalletFlowMapper flowMapper, ShopMapper shopMapper, OrderMapper orderMapper,
-                                  JdbcTemplate jdbc, SysConfigService config) {
+                                  JdbcTemplate jdbc, SysConfigService config, PayoutGateway payoutGateway) {
+        this.payoutGateway = payoutGateway;
         this.settlementMapper = settlementMapper;
         this.walletMapper = walletMapper;
         this.flowMapper = flowMapper;
@@ -278,7 +281,12 @@ public class MerchantFinanceService {
         return new PageResult<>(out, total, page, size);
     }
 
-    /** 审核提现：通过=打款完成（释放冻结），驳回=解冻退回可用余额。 */
+    /**
+     * 审核提现：通过=提交打款（mock 下直接视为已到账），驳回=解冻退回可用余额。
+     *
+     * <p>真实通道下这里会真的调微信「商家转账」；受理成功置为 1 打款中，
+     * 到账确认后由回调/人工置 2 已到账。
+     */
     @Transactional
     public void auditWithdraw(Long adminId, Long withdrawId, boolean pass, String reason) {
         Map<String, Object> row;
@@ -301,10 +309,25 @@ public class MerchantFinanceService {
         }
         LocalDateTime now = LocalDateTime.now();
         if (pass) {
+            // 先打款，成功了才动账；失败抛异常回滚，冻结原样保留供重试
+            int amountFen = amount;
+            PayoutGateway.PayoutResult pr = payoutGateway.transfer(
+                    "W" + withdrawId, resolveOpenid(ownerType, ownerId), amountFen,
+                    "结算打款（提现单 " + withdrawId + "）", "1000");
+            if (!pr.success()) {
+                throw new BizException(ErrorCode.PAY_FAILED, "打款失败：" + pr.message());
+            }
             jdbc.update("UPDATE wallet SET frozen = GREATEST(frozen - ?, 0), updated_at = ? WHERE id = ?",
                     amount, now, w.getId());
-            jdbc.update("UPDATE withdraw SET status = 2, audited_at = ?, paid_at = ?, fail_reason = NULL WHERE id = ?",
-                    now, now, withdrawId);
+            // mock 打款即时到账；真实通道受理后是「打款中」，等结果回填
+            int newStatus = payoutGateway.mock() ? 2 : 1;
+            LocalDateTime paidAt = newStatus == 2 ? now : null;
+            jdbc.update("UPDATE withdraw SET status = ?, audited_at = ?, paid_at = ?, fail_reason = NULL WHERE id = ?",
+                    newStatus, now, paidAt, withdrawId);
+            // wallet_flow 有 uk_biz(biz_type,biz_no) 唯一约束：申请时已用 WITHDRAW+id，
+            // 打款这一步必须换 biz_type，否则撞唯一键
+            flow(walletMapper.selectById(w.getId()), "WITHDRAW_PAY", String.valueOf(withdrawId), -1, amount,
+                    "提现打款（提现单 " + withdrawId + "）：" + pr.message());
         } else {
             jdbc.update("UPDATE wallet SET frozen = GREATEST(frozen - ?, 0), balance = balance + ?, "
                     + "version = version + 1, updated_at = ? WHERE id = ?", amount, amount, now, w.getId());
@@ -312,6 +335,68 @@ public class MerchantFinanceService {
                     now, reason == null ? "平台驳回" : reason, withdrawId);
             Wallet after = walletMapper.selectById(w.getId());
             flow(after, "WITHDRAW_REFUND", String.valueOf(withdrawId), 1, amount, "提现驳回退回（" + reason + "）");
+        }
+    }
+
+    /**
+     * 处理转账结果通知（提现打款异步回执）。
+     * out_bill_no = "W" + withdrawId，与 auditWithdraw 提交时一致。
+     */
+    @Transactional
+    public void handleTransferNotify(String outBillNo, boolean success, String message) {
+        if (outBillNo == null || !outBillNo.startsWith("W")) {
+            return;
+        }
+        long withdrawId;
+        try {
+            withdrawId = Long.parseLong(outBillNo.substring(1));
+        } catch (NumberFormatException e) {
+            return;
+        }
+        Map<String, Object> row;
+        try {
+            row = jdbc.queryForMap("SELECT * FROM withdraw WHERE id = ?", withdrawId);
+        } catch (Exception e) {
+            return;
+        }
+        int status = ((Number) row.get("status")).intValue();
+        // 幂等：已终态直接返回，微信会重复推送
+        if (status == 2 || status == 3) {
+            return;
+        }
+        int amount = ((Number) row.get("amount")).intValue();
+        int ownerType = ((Number) row.get("owner_type")).intValue();
+        long ownerId = ((Number) row.get("owner_id")).longValue();
+        LocalDateTime now = LocalDateTime.now();
+        Wallet w = walletMapper.selectOne(Wrappers.<Wallet>lambdaQuery()
+                .eq(Wallet::getOwnerType, ownerType).eq(Wallet::getOwnerId, ownerId));
+        if (success) {
+            jdbc.update("UPDATE withdraw SET status = 2, paid_at = ?, fail_reason = NULL WHERE id = ?",
+                    now, withdrawId);
+        } else {
+            // 打款失败：冻结解冻退回可用余额
+            jdbc.update("UPDATE wallet SET frozen = GREATEST(frozen - ?, 0), balance = balance + ?, "
+                    + "version = version + 1, updated_at = ? WHERE id = ?", amount, amount, now, w.getId());
+            jdbc.update("UPDATE withdraw SET status = 3, fail_reason = ? WHERE id = ?",
+                    message == null ? "打款失败" : message, withdrawId);
+            flow(walletMapper.selectById(w.getId()), "WITHDRAW_REFUND",
+                    withdrawId + "-FAIL", 1, amount, "打款失败退回（提现单 " + withdrawId + "）");
+        }
+    }
+
+    /**
+     * 找到收款人的小程序 openid。
+     * 商家：shop.owner_user_id → user.openid；骑手：rider.user_id → user.openid。
+     * 找不到说明对方还没用这个小程序登录过，微信无法转账。
+     */
+    private String resolveOpenid(int ownerType, long ownerId) {
+        try {
+            String sql = ownerType == OWNER_SHOP
+                    ? "SELECT u.openid FROM shop s JOIN `user` u ON u.id = s.owner_user_id WHERE s.id = ?"
+                    : "SELECT u.openid FROM rider r JOIN `user` u ON u.id = r.user_id WHERE r.id = ?";
+            return jdbc.queryForObject(sql, String.class, ownerId);
+        } catch (Exception e) {
+            return null;
         }
     }
 

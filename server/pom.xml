@@ -60,6 +60,13 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- 微信支付 v3 官方 SDK：JSAPI 下单 / 回调验签解密 / 退款 / 商家转账 -->
+        <dependency>
+            <groupId>com.github.wechatpay-apiv3</groupId>
+            <artifactId>wechatpay-java</artifactId>
+            <version>0.2.17</version>
+        </dependency>
+
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>

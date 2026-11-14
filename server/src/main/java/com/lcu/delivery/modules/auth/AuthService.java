@@ -131,6 +131,92 @@ public class AuthService {
         return toResp(user);
     }
 
+    /**
+     * 公众号网页授权地址。配置了 wechat.official 才返回真实地址；
+     * 否则返回 null，前端退回「学号登录 / 演示账号」。
+     */
+    public String oauthUrl(String redirectUri) {
+        WechatProperties.Official official = wechat.official();
+        if (official == null || official.appid() == null || official.appid().isBlank()) {
+            return null;
+        }
+        if (redirectUri == null || redirectUri.isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "缺少 redirect 参数");
+        }
+        return wechatClient.officialAuthUrl(official.appid(), redirectUri, "lcu");
+    }
+
+    /**
+     * 平台侧（浏览器 / 微信内置浏览器）登录。
+     *
+     * <p>真实模式：公众号网页授权的 code → openid + unionid，用 unionid 关联小程序账号，
+     * 保证同一个人在「小程序」和「网页」里是同一个用户、同一个钱包。
+     *
+     * <p>mock 模式：把 code 当成 openid 用，方便本地把 H5 登录流程跑通。
+     */
+    @Transactional
+    public LoginResp oauthLogin(String code) {
+        if (code == null || code.isBlank()) {
+            throw new BizException(ErrorCode.PARAM, "缺少授权 code");
+        }
+        WechatProperties.Official official = wechat.official();
+        boolean configured = official != null && official.appid() != null && !official.appid().isBlank()
+                && official.secret() != null && !official.secret().isBlank();
+
+        String mpOpenid;
+        String unionid = null;
+        if (configured) {
+            WechatClient.OAuthUser u = wechatClient.officialOpenid(official.appid(), official.secret(), code);
+            mpOpenid = u.openid();
+            unionid = u.unionid();
+        } else if (app.mockLogin()) {
+            // mock：把 code 直接当公众号 openid 用（findOrCreateByOAuth 会补 mp_ 前缀）
+            mpOpenid = code.trim();
+        } else {
+            throw new BizException(ErrorCode.PARAM,
+                    "后端未配置公众号 AppID/AppSecret（WX_MP_APPID / WX_MP_SECRET），无法在网页端登录");
+        }
+
+        User user = findOrCreateByOAuth(mpOpenid, unionid);
+        requireActive(user);
+        user.setUpdatedAt(LocalDateTime.now());
+        userMapper.updateById(user);
+        return toResp(user);
+    }
+
+    /** unionid 优先（跨端同一人），其次 mp_openid，最后新建。 */
+    private User findOrCreateByOAuth(String mpOpenid, String unionid) {
+        User user = null;
+        if (unionid != null && !unionid.isBlank()) {
+            user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getUnionid, unionid));
+        }
+        if (user == null) {
+            user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getMpOpenid, mpOpenid));
+        }
+        if (user != null) {
+            user.setMpOpenid(mpOpenid);
+            if (unionid != null && !unionid.isBlank()) {
+                user.setUnionid(unionid);
+            }
+            user.setUpdatedAt(LocalDateTime.now());
+            userMapper.updateById(user);
+            return user;
+        }
+        user = new User();
+        // openid 列 NOT NULL UNIQUE：公众号用户先用 mp_ 前缀占位，
+        // 之后若同一个人在小程序登录（unionid 相同），会命中这一行并补上真实 openid。
+        user.setOpenid("mp_" + mpOpenid);
+        user.setMpOpenid(mpOpenid);
+        user.setUnionid(unionid == null || unionid.isBlank() ? null : unionid);
+        user.setRole("USER");
+        user.setNickname("同学" + (int) (Math.random() * 9000 + 1000));
+        user.setStatus(1);
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        userMapper.insert(user);
+        return user;
+    }
+
     /** 被封禁的账号不允许登录（后台「封禁违规用户」要真的拦住入口，而不只是拦下单）。 */
     private void requireActive(User user) {
         Integer st = user.getStatus();

@@ -13,6 +13,10 @@ public class User {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String openid;
+    /** 微信 unionid：同一个小程序/公众号下的同一自然人 */
+    private String unionid;
+    /** 公众号网页授权 openid（与小程序 openid 不是同一个值） */
+    private String mpOpenid;
     private String nickname;
     private String avatar;
     private String phoneMask;
@@ -45,6 +49,22 @@ public class User {
 
     public void setOpenid(String openid) {
         this.openid = openid;
+    }
+
+    public String getUnionid() {
+        return unionid;
+    }
+
+    public void setUnionid(String unionid) {
+        this.unionid = unionid;
+    }
+
+    public String getMpOpenid() {
+        return mpOpenid;
+    }
+
+    public void setMpOpenid(String mpOpenid) {
+        this.mpOpenid = mpOpenid;
     }
 
 

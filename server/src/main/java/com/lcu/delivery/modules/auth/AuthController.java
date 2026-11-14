@@ -53,4 +53,22 @@ public class AuthController {
     public Result<AuthService.LoginResp> mockLogin(@RequestBody MockLoginReq req) {
         return Result.ok(authService.mockLogin(req.openid(), req.role()));
     }
+
+    /**
+     * 平台侧（H5 / 浏览器）登录第一步：拿公众号网页授权地址。
+     * 返回 data=null 表示后端没配公众号，前端应退回学号登录。
+     */
+    @GetMapping("/oauth-url")
+    public Result<String> oauthUrl(@RequestParam String redirect) {
+        return Result.ok(authService.oauthUrl(redirect));
+    }
+
+    public record OAuthLoginReq(String code) {
+    }
+
+    /** 平台侧登录第二步：授权回调带回的 code 换登录态（unionid 关联小程序账号）。 */
+    @PostMapping("/oauth-login")
+    public Result<AuthService.LoginResp> oauthLogin(@RequestBody OAuthLoginReq req) {
+        return Result.ok(authService.oauthLogin(req.code()));
+    }
 }

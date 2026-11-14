@@ -100,6 +100,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { api, couponApi, type Address, type Bill, type MyCoupon } from '../../api'
 import { useCartStore } from '../../stores/cart'
 import { guard } from '../../utils/auth'
+import { invokePay, pickPayScene } from '../../utils/pay'
 import { requestSubscribe } from '../../utils/subscribe'
 import AppTabBar from '../../components/AppTabBar.vue'
 
@@ -297,7 +298,8 @@ async function submit() {
     cart.clear()
     // 下单成功，幂等键作废，下次结算重新生成
     clientToken = null
-    const prepay = await api.prepay(order.orderId)
+    // 按运行环境选通道：小程序 MINIAPP / 微信内 H5 公众号 MP / 微信外 H5 MWEB
+    const prepay = await api.prepay(order.orderId, pickPayScene())
     if (prepay.mock) {
       const r = await new Promise<boolean>((resolve) => {
         uni.showModal({
@@ -307,6 +309,18 @@ async function submit() {
         })
       })
       if (r) await api.mockPay(order.orderId)
+    } else if (prepay.channel === 'native') {
+      // PC 扫码：跳订单详情，那里会展示二维码
+    } else {
+      const paid = await invokePay(prepay)
+      if (paid) {
+        // 回调是异步的：主动查单确认，避免订单一直显示待支付
+        try {
+          await api.syncPay(order.orderId)
+        } catch (e) {
+          console.warn('syncPay failed', e)
+        }
+      }
     }
     uni.redirectTo({ url: `/pages/order/detail?id=${order.orderId}` })
   } catch (e: any) {
