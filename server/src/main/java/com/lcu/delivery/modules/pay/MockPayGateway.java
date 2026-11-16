@@ -2,8 +2,6 @@ package com.lcu.delivery.modules.pay;
 
 import com.lcu.delivery.modules.order.entity.Order;
 import com.lcu.delivery.modules.pay.entity.Payment;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -11,10 +9,10 @@ import java.util.UUID;
 
 /**
  * 本地联调用：不产生真实扣款，前端拿到 mock=true 后直接调 /api/pay/mock-pay 模拟支付成功。
- * 生产环境把 app.mock-pay 设为 false 即自动切换到 WechatPayGateway。
+ *
+ * <p>由 {@link PayGatewayProvider} 按当前生效配置选择，不再是 Spring Bean ——
+ * 这样后台把「支付模式」从 mock 切到 real 时无需重启。
  */
-@Component
-@ConditionalOnProperty(name = "app.mock-pay", havingValue = "true", matchIfMissing = true)
 public class MockPayGateway implements PayGateway {
 
     @Override

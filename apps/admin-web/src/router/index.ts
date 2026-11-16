@@ -66,6 +66,12 @@ const router = createRouter({
           meta: { title: '平台配置' },
         },
         {
+          path: 'pay-config',
+          name: 'pay-config',
+          component: () => import('@/views/PayConfigView.vue'),
+          meta: { title: '支付配置' },
+        },
+        {
           path: 'coupons',
           name: 'coupons',
           component: () => import('@/views/CouponsView.vue'),

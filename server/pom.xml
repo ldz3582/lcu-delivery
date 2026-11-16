@@ -21,6 +21,12 @@
         <java.version>21</java.version>
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <jjwt.version>0.12.7</jjwt.version>
+        <!--
+          必须显式声明 UTF-8：源码里到处是中文字面量，Maven 默认按平台编码（Windows 上是 GBK）
+          读文件，会把 "小程序" 这类字符串编译成乱码，接口返回的中文提示全部损坏。
+        -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
 
     <dependencies>

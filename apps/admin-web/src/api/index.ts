@@ -292,6 +292,55 @@ export function updateConfig(key: string, value: string) {
   return put<void>('/admin/configs', { key, value })
 }
 
+/** 支付配置状态（敏感项已脱敏） */
+export interface PayConfigStatus {
+  mode: 'mock' | 'real'
+  source: 'db' | 'env'
+  mock: boolean
+  appId: string
+  mpAppId: string
+  mchId: string
+  serialNo: string
+  apiV3KeySet: boolean
+  apiV3KeyMask: string
+  privateKeySet: boolean
+  privateKeyMask: string
+  notifyUrl: string
+  missing: string[]
+  ready: boolean
+  updatedAt?: string
+  activeChannel: string
+  payoutChannel: string
+  steps: { no: number; title: string; detail: string; done: boolean }[]
+}
+
+export interface PayConfigPayload {
+  mode: string
+  appId: string
+  mpAppId: string
+  mchId: string
+  serialNo: string
+  /** 留空表示不修改 */
+  apiV3Key?: string
+  /** 留空表示不修改 */
+  privateKeyPem?: string
+  notifyUrl: string
+}
+
+export function getPayConfig() {
+  return get<PayConfigStatus>('/admin/pay-config')
+}
+
+export function savePayConfig(payload: PayConfigPayload) {
+  return put<PayConfigStatus>('/admin/pay-config', payload)
+}
+
+export function testPayConfig() {
+  return post<{ ok: boolean; message: string; elapsedMs: number; channel?: string }>(
+    '/admin/pay-config/test',
+  )
+}
+
 export interface Coupon {
   id: number
   name: string

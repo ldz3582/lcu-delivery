@@ -78,8 +78,9 @@ public class AuthInterceptor implements HandlerInterceptor {
             return;
         }
         String p = path.substring("/api/admin/".length());
-        if (p.startsWith("accounts") || p.startsWith("configs") || p.startsWith("fence")) {
-            throw new BizException(ErrorCode.FORBIDDEN, "只有超级管理员可以操作「账号 / 平台配置 / 围栏」");
+        if (p.startsWith("accounts") || p.startsWith("configs") || p.startsWith("fence")
+                || p.startsWith("pay-config")) {
+            throw new BizException(ErrorCode.FORBIDDEN, "只有超级管理员可以操作「账号 / 平台配置 / 围栏 / 支付配置」");
         }
         // 概览页是所有角色登录后的落地页，必须放行，否则非 SUPER 一登录就 403
         if (matches(p, COMMON_KEYS)) {

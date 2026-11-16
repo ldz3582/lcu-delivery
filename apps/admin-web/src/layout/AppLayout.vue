@@ -62,6 +62,7 @@ const ALL_MENUS = [
   { path: '/feedbacks', label: '用户反馈', icon: ChatLineSquare },
   { path: '/accounts', label: '账号权限', icon: Key },
   { path: '/configs', label: '平台配置', icon: Setting },
+  { path: '/pay-config', label: '支付配置', icon: CreditCard },
 ]
 
 /** 角色可见菜单：null = 全部；未列出的角色按只读运营处理 */
@@ -72,9 +73,9 @@ const ROLE_MENUS: Record<string, string[] | null> = {
   CS: ['/orders', '/after-sales', '/reviews', '/incidents'],
 }
 
-/** 运营只读：除账号权限 / 平台配置（仅 SUPER）外均可查看 */
+/** 运营只读：除账号权限 / 平台配置 / 支付配置（仅 SUPER）外均可查看 */
 const OPERATOR_PATHS = ALL_MENUS.map((m) => m.path).filter(
-  (p) => p !== '/accounts' && p !== '/configs',
+  (p) => p !== '/accounts' && p !== '/configs' && p !== '/pay-config',
 )
 
 const menus = computed(() => {

@@ -1,13 +1,11 @@
 package com.lcu.delivery.modules.pay;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
+import java.util.Map;
 
 /**
  * 模拟打款：审核通过即视为已到账，不产生真实转账。
+ * 由 {@link PayoutGatewayProvider} 按生效配置选择。
  */
-@Component
-@ConditionalOnProperty(name = "app.mock-pay", havingValue = "true", matchIfMissing = true)
 public class MockPayoutGateway implements PayoutGateway {
 
     @Override
